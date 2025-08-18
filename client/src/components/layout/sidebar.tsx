@@ -114,7 +114,7 @@ export default function Sidebar({ activeModule, onModuleChange }: SidebarProps) 
                 "inline-flex px-2 py-1 text-xs font-semibold rounded-full",
                 getRoleColor(user?.role || 'employee')
               )}>
-                {user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)}
+                {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Employee'}
               </span>
             </div>
           </div>

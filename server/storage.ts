@@ -12,7 +12,6 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
-import { SessionStore } from "express-session";
 import createMemoryStore from "memorystore";
 
 const MemoryStore = createMemoryStore(session);
@@ -53,7 +52,7 @@ export interface IStorage {
   getAllAuditLogs(): Promise<AuditLog[]>;
   getAuditLogsByUser(userId: string): Promise<AuditLog[]>;
 
-  sessionStore: SessionStore;
+  sessionStore: session.Store;
 }
 
 export class MemStorage implements IStorage {
@@ -63,7 +62,7 @@ export class MemStorage implements IStorage {
   private expenses: Map<string, Expense>;
   private auditLogs: Map<string, AuditLog>;
   private orderCounter: number = 1;
-  public sessionStore: SessionStore;
+  public sessionStore: session.Store;
 
   constructor() {
     this.users = new Map();
@@ -85,7 +84,7 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       username: "admin",
       email: "admin@company.com",
-      password: "$2b$10$K9Q7V7mZm6Q7V7mZm6Q7V7O", // hashed "admin123"
+      password: "697b704ddb9d19fe4ae84a6755778c1c5585ec51baf70f77d8aeaadeaece8693d275ae69441489e8217182c269036d729ae9767d81102aecc198ffb4c023db2f.7fc5b3393d9d6400aac21080d1142e9a", // scrypt hashed "admin123"
       firstName: "John",
       lastName: "Admin",
       role: "admin",
@@ -112,8 +111,10 @@ export class MemStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
     const user: User = { 
-      ...insertUser, 
+      ...insertUser,
       id,
+      role: insertUser.role || "employee",
+      isActive: insertUser.isActive ?? true,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -146,8 +147,13 @@ export class MemStorage implements IStorage {
   async createInventoryItem(insertItem: InsertInventoryItem): Promise<InventoryItem> {
     const id = randomUUID();
     const item: InventoryItem = { 
-      ...insertItem, 
+      ...insertItem,
       id,
+      description: insertItem.description || null,
+      status: insertItem.status || "active",
+      stock: insertItem.stock || 0,
+      minStock: insertItem.minStock || 0,
+      imageUrl: insertItem.imageUrl || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -185,9 +191,11 @@ export class MemStorage implements IStorage {
     const id = randomUUID();
     const orderNumber = `ORD-${new Date().getFullYear()}-${String(this.orderCounter++).padStart(3, '0')}`;
     const order: SalesOrder = { 
-      ...insertOrder, 
+      ...insertOrder,
       id,
       orderNumber,
+      status: insertOrder.status || "pending",
+      orderDate: insertOrder.orderDate || new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -220,8 +228,12 @@ export class MemStorage implements IStorage {
   async createExpense(insertExpense: InsertExpense): Promise<Expense> {
     const id = randomUUID();
     const expense: Expense = { 
-      ...insertExpense, 
+      ...insertExpense,
       id,
+      description: insertExpense.description || null,
+      status: insertExpense.status || "pending",
+      approvedBy: insertExpense.approvedBy || null,
+      receiptUrl: insertExpense.receiptUrl || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -246,8 +258,11 @@ export class MemStorage implements IStorage {
   async createAuditLog(insertLog: InsertAuditLog): Promise<AuditLog> {
     const id = randomUUID();
     const log: AuditLog = { 
-      ...insertLog, 
+      ...insertLog,
       id,
+      details: insertLog.details || null,
+      ipAddress: insertLog.ipAddress || null,
+      userAgent: insertLog.userAgent || null,
       timestamp: new Date(),
     };
     this.auditLogs.set(id, log);
