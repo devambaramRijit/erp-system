@@ -59,9 +59,9 @@ export default function InventoryModule() {
       item.name.toLowerCase().includes(filters.search.toLowerCase()) ||
       item.sku.toLowerCase().includes(filters.search.toLowerCase());
     
-    const matchesCategory = !filters.category || item.category === filters.category;
+    const matchesCategory = !filters.category || filters.category === 'all' || item.category === filters.category;
     
-    const matchesStatus = !filters.status || 
+    const matchesStatus = !filters.status || filters.status === 'all' ||
       (filters.status === 'in-stock' && item.stock > item.minStock) ||
       (filters.status === 'low-stock' && item.stock <= item.minStock && item.stock > 0) ||
       (filters.status === 'out-of-stock' && item.stock === 0);
@@ -122,7 +122,7 @@ export default function InventoryModule() {
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
+                  <SelectItem value="all">All Categories</SelectItem>
                   {categories.map(category => (
                     <SelectItem key={category} value={category}>
                       {category}
@@ -140,7 +140,7 @@ export default function InventoryModule() {
                   <SelectValue placeholder="All Items" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Items</SelectItem>
+                  <SelectItem value="all">All Items</SelectItem>
                   <SelectItem value="in-stock">In Stock</SelectItem>
                   <SelectItem value="low-stock">Low Stock</SelectItem>
                   <SelectItem value="out-of-stock">Out of Stock</SelectItem>
@@ -151,7 +151,7 @@ export default function InventoryModule() {
               <Button 
                 variant="outline" 
                 className="w-full"
-                onClick={() => dispatch(setFilters({ search: '', category: '', status: '' }))}
+                onClick={() => dispatch(setFilters({ search: '', category: 'all', status: 'all' }))}
                 data-testid="button-clear-filters"
               >
                 <Filter className="h-4 w-4 mr-2" />

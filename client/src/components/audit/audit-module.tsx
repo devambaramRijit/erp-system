@@ -38,7 +38,7 @@ export default function AuditModule() {
     const matchesDate = !dateFilter || 
       new Date(log.timestamp).toDateString() === new Date(dateFilter).toDateString();
     
-    const matchesAction = !actionFilter || log.action === actionFilter;
+    const matchesAction = !actionFilter || actionFilter === 'all' || log.action === actionFilter;
 
     return matchesDate && matchesAction;
   }) || [];
@@ -96,7 +96,7 @@ export default function AuditModule() {
               <SelectValue placeholder="All Actions" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Actions</SelectItem>
+              <SelectItem value="all">All Actions</SelectItem>
               <SelectItem value="CREATE">Create</SelectItem>
               <SelectItem value="UPDATE">Update</SelectItem>
               <SelectItem value="DELETE">Delete</SelectItem>

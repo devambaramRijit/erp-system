@@ -42,9 +42,9 @@ export default function EmployeesModule() {
       employee.lastName.toLowerCase().includes(filters.search.toLowerCase()) ||
       employee.email.toLowerCase().includes(filters.search.toLowerCase());
     
-    const matchesRole = !filters.role || employee.role === filters.role;
+    const matchesRole = !filters.role || filters.role === 'all' || employee.role === filters.role;
     
-    const matchesStatus = !filters.status || 
+    const matchesStatus = !filters.status || filters.status === 'all' ||
       (filters.status === 'active' && employee.isActive) ||
       (filters.status === 'inactive' && !employee.isActive);
 
