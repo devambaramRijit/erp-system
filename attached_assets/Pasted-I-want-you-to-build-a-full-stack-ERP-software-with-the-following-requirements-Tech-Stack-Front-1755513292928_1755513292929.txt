@@ -1,0 +1,89 @@
+I want you to build a full-stack ERP software with the following requirements:
+
+🏗 Tech Stack
+
+Frontend: React (with TypeScript), Redux Toolkit for state management, Recharts for charts, and Material UI for UI components.
+
+Backend: Node.js with Express.
+
+Database: PostgreSQL.
+
+Hosting: Use Vercel (frontend) and Railway (backend + DB).
+
+Authentication & Security: JWT (JSON Web Tokens) for authentication, Role-Based Access Control (RBAC) for Employees, Managers, and Admins, and Audit Logs stored in the database for every critical action.
+
+📊 Core ERP Modules (Phase 1)
+
+Dashboard → Overview of business KPIs (charts, tables, activity logs).
+
+Inventory Management → Add, update, delete, and track stock items.
+
+Sales & Orders → Create/manage sales orders, invoices, and order history.
+
+Expenses → Track business expenses with category, date, and reporting.
+
+HR (Employees Management) → Add/manage employees, assign roles (Employee/Manager/Admin).
+
+Authentication & Users → Login, signup, role-based dashboards.
+
+Audit Logs → Every create/update/delete action stored with timestamp and user role.
+
+⚙️ Features
+
+Frontend:
+
+Protected routes (RBAC) → Employees, Managers, Admins see different menus.
+
+Global state with Redux Toolkit.
+
+Charts using Recharts for sales/expenses/inventory trends.
+
+Responsive UI with Material UI.
+
+Backend:
+
+RESTful API endpoints (CRUD for all modules).
+
+Authentication middleware with JWT.
+
+Role-based access control.
+
+Centralized error handling & logging.
+
+Database (PostgreSQL):
+
+Tables for Users, Roles, Inventory, Orders, Expenses, Audit Logs.
+
+Relationships (Users ↔ Roles, Orders ↔ Inventory, etc.).
+
+Security:
+
+Hash passwords with bcrypt.
+
+Secure API routes (auth middleware).
+
+Audit logs written for all sensitive DB operations.
+
+📦 Deliverables
+
+Full folder structure (frontend & backend in monorepo).
+
+Database schema (SQL migrations or Prisma/Sequelize ORM).
+
+Ready-to-deploy configuration for Railway & Vercel.
+
+Seed data for testing (sample employees, inventory, expenses, orders).
+
+Instructions in README to run locally & deploy.
+
+🔮 Future Scope (not now, but keep extensibility)
+
+Payroll & Salaries
+
+CRM (Customer Relationship Management)
+
+Vendor & Supplier Management
+
+Reporting & Analytics (advanced)
+
+Make the code clean, modular, scalable, and production-ready. Add comments wherever needed. Create APIs with proper error handling and ensure secure authentication with JWT & RBAC. The ERP should run locally with npm run dev and be deployable directly to Vercel & Railway.
