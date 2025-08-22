@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    /* Language and module settings */
+    "target": "es2020",
+    "module": "Node16",
+    "moduleResolution": "NodeNext",
+
+    /* Output and root directories */
+    "outDir": "./dist/server",
+    "rootDir": ".",
+
+    /* Path mapping */
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["shared/*"]
+    },
+
+    /* Interop and compatibility */
+    "esModuleInterop": true,
+
+    /* Type checking */
+    "strict": true,
+    "skipLibCheck": true
+  },
+
+  /* Files included in compilation */
+  "include": [
+    "server/**/*.ts",
+    "shared/**/*"
+  ]
+}

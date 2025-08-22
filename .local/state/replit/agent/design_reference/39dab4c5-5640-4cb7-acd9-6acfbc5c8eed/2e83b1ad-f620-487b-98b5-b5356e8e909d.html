@@ -1,0 +1,1109 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP Dashboard - Enterprise Resource Planning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#e3f2fd',
+                            500: '#1976d2',
+                            600: '#1565c0',
+                            700: '#0d47a1'
+                        },
+                        secondary: {
+                            500: '#dc004e',
+                            600: '#c51162'
+                        },
+                        success: {
+                            500: '#2e7d32',
+                            600: '#1b5e20'
+                        },
+                        warning: {
+                            500: '#ed6c02',
+                            600: '#e65100'
+                        },
+                        error: {
+                            500: '#d32f2f',
+                            600: '#c62828'
+                        },
+                        surface: '#ffffff',
+                        background: '#fafafa'
+                    },
+                    fontFamily: {
+                        'roboto': ['Roboto', 'sans-serif']
+                    },
+                    boxShadow: {
+                        'material-1': '0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12)',
+                        'material-2': '0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)',
+                        'material-4': '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)'
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background text-gray-800">
+    <!-- @COMPONENT: App [Root application wrapper] -->
+    <div id="app" class="min-h-screen">
+        
+        <!-- @COMPONENT: AuthContainer [Authentication wrapper and login screen] -->
+        <div id="authContainer" class="hidden fixed inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-material-4 p-8 w-full max-w-md">
+                <div class="text-center mb-8">
+                    <i class="fas fa-building text-4xl text-primary-500 mb-4"></i>
+                    <h1 class="text-2xl font-medium text-gray-900">ERP Dashboard</h1>
+                    <p class="text-gray-600 mt-2">Enterprise Resource Planning System</p>
+                </div>
+                
+                <form class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                        <input type="email" data-bind="auth.email" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" placeholder="admin@company.com" data-mock="true">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                        <input type="password" data-bind="auth.password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" placeholder="••••••••" data-mock="true">
+                    </div>
+                    
+                    <button type="button" onclick="showDashboard()" data-event="click:handleLogin" class="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition duration-200">
+                        Sign In
+                    </button>
+                </form>
+                
+                <div class="mt-6 text-center text-sm text-gray-600">
+                    <p data-mock="true">Demo Credentials:</p>
+                    <p data-mock="true">Admin: admin@company.com / Manager: manager@company.com / Employee: employee@company.com</p>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: AuthContainer -->
+
+        <!-- @COMPONENT: MainLayout [Main application layout with sidebar and content] -->
+        <div id="mainLayout" class="flex h-screen bg-background">
+            
+            <!-- @COMPONENT: Sidebar [Navigation sidebar] -->
+            <div class="w-64 bg-white shadow-material-2 flex flex-col">
+                <!-- @STATE: sidebarCollapsed:boolean = false -->
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex items-center">
+                        <i class="fas fa-building text-2xl text-primary-500 mr-3"></i>
+                        <div>
+                            <h1 class="text-xl font-medium text-gray-900">ERP System</h1>
+                            <p class="text-sm text-gray-600" data-bind="user.company" data-mock="true">Acme Corporation</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <nav class="flex-1 p-4 space-y-2">
+                    <!-- @MAP: navigationItems.map(item => ( -->
+                    <a href="#" onclick="switchModule('dashboard')" data-event="click:setActiveModule" class="flex items-center px-3 py-2 rounded-md text-primary-600 bg-primary-50 font-medium">
+                        <i class="fas fa-chart-pie mr-3"></i>
+                        Dashboard
+                    </a>
+                    <a href="#" onclick="switchModule('inventory')" data-event="click:setActiveModule" class="flex items-center px-3 py-2 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition duration-200">
+                        <i class="fas fa-boxes mr-3"></i>
+                        Inventory
+                    </a>
+                    <a href="#" onclick="switchModule('sales')" data-event="click:setActiveModule" class="flex items-center px-3 py-2 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition duration-200">
+                        <i class="fas fa-shopping-cart mr-3"></i>
+                        Sales & Orders
+                    </a>
+                    <a href="#" onclick="switchModule('expenses')" data-event="click:setActiveModule" class="flex items-center px-3 py-2 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition duration-200">
+                        <i class="fas fa-receipt mr-3"></i>
+                        Expenses
+                    </a>
+                    <a href="#" onclick="switchModule('hr')" data-event="click:setActiveModule" class="flex items-center px-3 py-2 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition duration-200">
+                        <i class="fas fa-users mr-3"></i>
+                        Employees
+                    </a>
+                    <a href="#" onclick="switchModule('audit')" data-event="click:setActiveModule" class="flex items-center px-3 py-2 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition duration-200">
+                        <i class="fas fa-clipboard-list mr-3"></i>
+                        Audit Logs
+                    </a>
+                    <!-- @END_MAP )) -->
+                </nav>
+                
+                <div class="p-4 border-t border-gray-200">
+                    <div class="flex items-center">
+                        <!-- A professional headshot of a business person in suit -->
+                        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100" alt="User avatar" class="w-10 h-10 rounded-full mr-3" data-bind="user.avatar">
+                        <div class="flex-1">
+                            <p class="text-sm font-medium text-gray-900" data-bind="user.name" data-mock="true">John Admin</p>
+                            <p class="text-xs text-gray-600" data-bind="user.role" data-mock="true">Administrator</p>
+                        </div>
+                        <button class="p-1 rounded-md text-gray-400 hover:text-gray-600" data-event="click:handleLogout">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: Sidebar -->
+
+            <!-- @COMPONENT: MainContent [Main content area with different modules] -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                
+                <!-- @COMPONENT: TopBar [Header bar with breadcrumbs and user actions] -->
+                <header class="bg-white shadow-material-1 px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <h2 class="text-2xl font-medium text-gray-900" id="moduleTitle">Dashboard</h2>
+                        <nav class="ml-4 flex items-center text-sm text-gray-600">
+                            <i class="fas fa-home mr-1"></i>
+                            <span>Home</span>
+                            <i class="fas fa-chevron-right mx-2"></i>
+                            <span id="breadcrumbCurrent">Dashboard</span>
+                        </nav>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <button class="p-2 rounded-md text-gray-400 hover:text-gray-600 relative" data-event="click:showNotifications">
+                            <i class="fas fa-bell"></i>
+                            <span class="absolute -top-1 -right-1 bg-error-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center" data-bind="notifications.count" data-mock="true">3</span>
+                        </button>
+                        <button class="bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 transition duration-200" data-event="click:showQuickActions">
+                            <i class="fas fa-plus mr-2"></i>
+                            Quick Add
+                        </button>
+                    </div>
+                </header>
+                <!-- @END_COMPONENT: TopBar -->
+
+                <!-- @COMPONENT: ContentArea [Scrollable content area for different modules] -->
+                <main class="flex-1 overflow-y-auto p-6">
+                    
+                    <!-- @COMPONENT: DashboardModule [Default dashboard view] -->
+                    <div id="dashboardModule" class="space-y-6">
+                        
+                        <!-- KPI Cards Row -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <!-- @MAP: kpiCards.map(kpi => ( -->
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Total Revenue</p>
+                                        <p class="text-3xl font-bold text-gray-900" data-bind="kpi.totalRevenue" data-mock="true">$124,500</p>
+                                        <p class="text-sm text-success-500 mt-1">
+                                            <i class="fas fa-arrow-up mr-1"></i>
+                                            <span data-bind="kpi.revenueGrowth" data-mock="true">12.5%</span> vs last month
+                                        </p>
+                                    </div>
+                                    <div class="p-3 bg-primary-50 rounded-full">
+                                        <i class="fas fa-dollar-sign text-xl text-primary-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Orders</p>
+                                        <p class="text-3xl font-bold text-gray-900" data-bind="kpi.orders" data-mock="true">1,247</p>
+                                        <p class="text-sm text-success-500 mt-1">
+                                            <i class="fas fa-arrow-up mr-1"></i>
+                                            <span data-bind="kpi.orderGrowth" data-mock="true">8.2%</span> vs last month
+                                        </p>
+                                    </div>
+                                    <div class="p-3 bg-warning-50 rounded-full">
+                                        <i class="fas fa-shopping-cart text-xl text-warning-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Inventory Items</p>
+                                        <p class="text-3xl font-bold text-gray-900" data-bind="kpi.inventoryItems" data-mock="true">2,891</p>
+                                        <p class="text-sm text-error-500 mt-1">
+                                            <i class="fas fa-arrow-down mr-1"></i>
+                                            <span data-bind="kpi.inventoryChange" data-mock="true">3.1%</span> vs last month
+                                        </p>
+                                    </div>
+                                    <div class="p-3 bg-success-50 rounded-full">
+                                        <i class="fas fa-boxes text-xl text-success-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Active Employees</p>
+                                        <p class="text-3xl font-bold text-gray-900" data-bind="kpi.employees" data-mock="true">127</p>
+                                        <p class="text-sm text-success-500 mt-1">
+                                            <i class="fas fa-arrow-up mr-1"></i>
+                                            <span data-bind="kpi.employeeGrowth" data-mock="true">2.4%</span> vs last month
+                                        </p>
+                                    </div>
+                                    <div class="p-3 bg-secondary-50 rounded-full">
+                                        <i class="fas fa-users text-xl text-secondary-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- @END_MAP )) -->
+                        </div>
+                        
+                        <!-- Charts Row -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Revenue Trend</h3>
+                                    <select class="text-sm border border-gray-300 rounded-md px-3 py-1">
+                                        <option>Last 6 months</option>
+                                        <option>Last year</option>
+                                    </select>
+                                </div>
+                                <div class="h-64">
+                                    <canvas id="revenueChart"></canvas>
+                                    <!-- @FUNCTIONALITY: Revenue trend chart showing monthly/quarterly data -->
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Sales by Category</h3>
+                                    <button class="text-sm text-primary-500 hover:text-primary-600">View All</button>
+                                </div>
+                                <div class="h-64">
+                                    <canvas id="categoryChart"></canvas>
+                                    <!-- @FUNCTIONALITY: Pie chart showing sales distribution by product categories -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Recent Activity -->
+                        <div class="bg-white rounded-lg shadow-material-1">
+                            <div class="px-6 py-4 border-b border-gray-200">
+                                <h3 class="text-lg font-medium text-gray-900">Recent Activity</h3>
+                            </div>
+                            <div class="divide-y divide-gray-200">
+                                <!-- @MAP: recentActivities.map(activity => ( -->
+                                <div class="px-6 py-4 flex items-center">
+                                    <div class="flex-shrink-0 w-2 h-2 bg-success-500 rounded-full mr-4"></div>
+                                    <div class="flex-1">
+                                        <p class="text-sm font-medium text-gray-900" data-mock="true">New order #ORD-2024-001 created</p>
+                                        <p class="text-sm text-gray-600" data-mock="true">by Sarah Johnson • 2 minutes ago</p>
+                                    </div>
+                                    <div class="text-sm text-gray-500" data-mock="true">$1,250.00</div>
+                                </div>
+                                <div class="px-6 py-4 flex items-center">
+                                    <div class="flex-shrink-0 w-2 h-2 bg-warning-500 rounded-full mr-4"></div>
+                                    <div class="flex-1">
+                                        <p class="text-sm font-medium text-gray-900" data-mock="true">Inventory alert: Low stock for Product ABC</p>
+                                        <p class="text-sm text-gray-600" data-mock="true">System Alert • 15 minutes ago</p>
+                                    </div>
+                                    <div class="text-sm text-gray-500" data-mock="true">12 units</div>
+                                </div>
+                                <div class="px-6 py-4 flex items-center">
+                                    <div class="flex-shrink-0 w-2 h-2 bg-primary-500 rounded-full mr-4"></div>
+                                    <div class="flex-1">
+                                        <p class="text-sm font-medium text-gray-900" data-mock="true">New employee Mike Davis added to HR system</p>
+                                        <p class="text-sm text-gray-600" data-mock="true">by Admin • 1 hour ago</p>
+                                    </div>
+                                    <div class="text-sm text-gray-500" data-mock="true">Manager</div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: DashboardModule -->
+
+                    <!-- @COMPONENT: InventoryModule [Inventory management interface] -->
+                    <div id="inventoryModule" class="hidden space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-2xl font-medium text-gray-900">Inventory Management</h2>
+                            <button class="bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 transition duration-200" data-event="click:openAddInventoryModal">
+                                <i class="fas fa-plus mr-2"></i>
+                                Add Item
+                            </button>
+                        </div>
+                        
+                        <!-- Filters and Search -->
+                        <div class="bg-white rounded-lg shadow-material-1 p-6">
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Search Items</label>
+                                    <input type="text" placeholder="Search by name, SKU..." class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500">
+                                        <option>All Categories</option>
+                                        <option>Electronics</option>
+                                        <option>Clothing</option>
+                                        <option>Home & Garden</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Stock Status</label>
+                                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500">
+                                        <option>All Items</option>
+                                        <option>In Stock</option>
+                                        <option>Low Stock</option>
+                                        <option>Out of Stock</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-end">
+                                    <button class="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 transition duration-200">
+                                        <i class="fas fa-filter mr-2"></i>
+                                        Apply Filters
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Inventory Table -->
+                        <div class="bg-white rounded-lg shadow-material-1 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        <!-- @MAP: inventoryItems.map(item => ( -->
+                                        <tr data-mock="true">
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="flex items-center">
+                                                    <!-- A modern laptop computer -->
+                                                    <img src="https://images.unsplash.com/photo-1496181133206-80ce9b88a853?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=50&h=50" alt="Laptop Pro 15" class="w-10 h-10 rounded-md object-cover mr-4">
+                                                    <div>
+                                                        <div class="text-sm font-medium text-gray-900">Laptop Pro 15"</div>
+                                                        <div class="text-sm text-gray-500">High-performance laptop</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">LAP-001</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Electronics</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">25</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$1,299.00</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-success-100 text-success-800">In Stock</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                <button class="text-primary-600 hover:text-primary-900" data-event="click:editItem">Edit</button>
+                                                <button class="text-error-600 hover:text-error-900" data-event="click:deleteItem">Delete</button>
+                                            </td>
+                                        </tr>
+                                        <tr data-mock="true">
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="flex items-center">
+                                                    <!-- A stylish office chair -->
+                                                    <img src="https://images.unsplash.com/photo-1586023492125-27b2c045efd7?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=50&h=50" alt="Office Chair Deluxe" class="w-10 h-10 rounded-md object-cover mr-4">
+                                                    <div>
+                                                        <div class="text-sm font-medium text-gray-900">Office Chair Deluxe</div>
+                                                        <div class="text-sm text-gray-500">Ergonomic office chair</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">CHR-002</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Furniture</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">8</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$349.00</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-warning-100 text-warning-800">Low Stock</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                <button class="text-primary-600 hover:text-primary-900" data-event="click:editItem">Edit</button>
+                                                <button class="text-error-600 hover:text-error-900" data-event="click:deleteItem">Delete</button>
+                                            </td>
+                                        </tr>
+                                        <!-- @END_MAP )) -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: InventoryModule -->
+
+                    <!-- @COMPONENT: SalesModule [Sales and orders management] -->
+                    <div id="salesModule" class="hidden space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-2xl font-medium text-gray-900">Sales & Orders</h2>
+                            <button class="bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 transition duration-200" data-event="click:createNewOrder">
+                                <i class="fas fa-plus mr-2"></i>
+                                New Order
+                            </button>
+                        </div>
+                        
+                        <!-- Order Statistics -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-success-100 rounded-full mr-4">
+                                        <i class="fas fa-check-circle text-xl text-success-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Completed Orders</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="orders.completed" data-mock="true">1,234</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-warning-100 rounded-full mr-4">
+                                        <i class="fas fa-clock text-xl text-warning-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Pending Orders</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="orders.pending" data-mock="true">87</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-primary-100 rounded-full mr-4">
+                                        <i class="fas fa-dollar-sign text-xl text-primary-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Total Sales</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="orders.totalSales" data-mock="true">$428,500</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Orders Table -->
+                        <div class="bg-white rounded-lg shadow-material-1 overflow-hidden">
+                            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                                <h3 class="text-lg font-medium text-gray-900">Recent Orders</h3>
+                                <div class="flex space-x-2">
+                                    <select class="text-sm border border-gray-300 rounded-md px-3 py-1">
+                                        <option>All Orders</option>
+                                        <option>Pending</option>
+                                        <option>Completed</option>
+                                        <option>Cancelled</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        <!-- @MAP: orders.map(order => ( -->
+                                        <tr data-mock="true">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#ORD-2024-001</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Sarah Johnson</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-01-15</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$1,250.00</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-success-100 text-success-800">Completed</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                <button class="text-primary-600 hover:text-primary-900" data-event="click:viewOrder">View</button>
+                                                <button class="text-gray-600 hover:text-gray-900" data-event="click:printInvoice">Invoice</button>
+                                            </td>
+                                        </tr>
+                                        <tr data-mock="true">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#ORD-2024-002</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Michael Chen</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-01-16</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$875.50</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-warning-100 text-warning-800">Pending</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                <button class="text-primary-600 hover:text-primary-900" data-event="click:viewOrder">View</button>
+                                                <button class="text-gray-600 hover:text-gray-900" data-event="click:printInvoice">Invoice</button>
+                                            </td>
+                                        </tr>
+                                        <!-- @END_MAP )) -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: SalesModule -->
+
+                    <!-- @COMPONENT: ExpensesModule [Expense tracking interface] -->
+                    <div id="expensesModule" class="hidden space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-2xl font-medium text-gray-900">Expense Management</h2>
+                            <button class="bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 transition duration-200" data-event="click:addExpense">
+                                <i class="fas fa-plus mr-2"></i>
+                                Add Expense
+                            </button>
+                        </div>
+                        
+                        <!-- Expense Summary -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">This Month</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="expenses.thisMonth" data-mock="true">$12,450</p>
+                                    </div>
+                                    <div class="p-3 bg-error-50 rounded-full">
+                                        <i class="fas fa-arrow-down text-xl text-error-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Last Month</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="expenses.lastMonth" data-mock="true">$15,280</p>
+                                    </div>
+                                    <div class="p-3 bg-gray-100 rounded-full">
+                                        <i class="fas fa-calendar text-xl text-gray-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">YTD Total</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="expenses.ytd" data-mock="true">$89,750</p>
+                                    </div>
+                                    <div class="p-3 bg-warning-50 rounded-full">
+                                        <i class="fas fa-chart-line text-xl text-warning-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Pending</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="expenses.pending" data-mock="true">$2,340</p>
+                                    </div>
+                                    <div class="p-3 bg-warning-50 rounded-full">
+                                        <i class="fas fa-clock text-xl text-warning-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Expense Categories Chart -->
+                        <div class="bg-white rounded-lg shadow-material-1 p-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Expenses by Category</h3>
+                            <div class="h-64">
+                                <canvas id="expenseCategoryChart"></canvas>
+                                <!-- @FUNCTIONALITY: Bar chart showing expenses breakdown by categories -->
+                            </div>
+                        </div>
+                        
+                        <!-- Recent Expenses -->
+                        <div class="bg-white rounded-lg shadow-material-1 overflow-hidden">
+                            <div class="px-6 py-4 border-b border-gray-200">
+                                <h3 class="text-lg font-medium text-gray-900">Recent Expenses</h3>
+                            </div>
+                            <div class="divide-y divide-gray-200">
+                                <!-- @MAP: recentExpenses.map(expense => ( -->
+                                <div class="px-6 py-4 flex items-center justify-between" data-mock="true">
+                                    <div class="flex items-center">
+                                        <div class="p-2 bg-gray-100 rounded-full mr-4">
+                                            <i class="fas fa-utensils text-gray-600"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-900">Team Lunch - Client Meeting</p>
+                                            <p class="text-sm text-gray-500">Marketing • Jan 15, 2024</p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm font-medium text-gray-900">$125.00</p>
+                                        <p class="text-sm text-success-600">Approved</p>
+                                    </div>
+                                </div>
+                                <div class="px-6 py-4 flex items-center justify-between" data-mock="true">
+                                    <div class="flex items-center">
+                                        <div class="p-2 bg-gray-100 rounded-full mr-4">
+                                            <i class="fas fa-laptop text-gray-600"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-900">Software License - Adobe CC</p>
+                                            <p class="text-sm text-gray-500">IT • Jan 14, 2024</p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm font-medium text-gray-900">$89.99</p>
+                                        <p class="text-sm text-warning-600">Pending</p>
+                                    </div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: ExpensesModule -->
+
+                    <!-- @COMPONENT: HRModule [Employee management interface] -->
+                    <div id="hrModule" class="hidden space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-2xl font-medium text-gray-900">Employee Management</h2>
+                            <button class="bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 transition duration-200" data-event="click:addEmployee">
+                                <i class="fas fa-user-plus mr-2"></i>
+                                Add Employee
+                            </button>
+                        </div>
+                        
+                        <!-- Employee Stats -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-primary-100 rounded-full mr-4">
+                                        <i class="fas fa-users text-xl text-primary-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Total Employees</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="employees.total" data-mock="true">127</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-success-100 rounded-full mr-4">
+                                        <i class="fas fa-user-tie text-xl text-success-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Managers</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="employees.managers" data-mock="true">12</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-warning-100 rounded-full mr-4">
+                                        <i class="fas fa-user-check text-xl text-warning-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Active Today</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="employees.activeToday" data-mock="true">98</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-secondary-100 rounded-full mr-4">
+                                        <i class="fas fa-user-plus text-xl text-secondary-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">New This Month</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="employees.newThisMonth" data-mock="true">5</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Employee Directory -->
+                        <div class="bg-white rounded-lg shadow-material-1">
+                            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                                <h3 class="text-lg font-medium text-gray-900">Employee Directory</h3>
+                                <div class="flex space-x-2">
+                                    <input type="text" placeholder="Search employees..." class="text-sm border border-gray-300 rounded-md px-3 py-1 w-64">
+                                    <select class="text-sm border border-gray-300 rounded-md px-3 py-1">
+                                        <option>All Roles</option>
+                                        <option>Admin</option>
+                                        <option>Manager</option>
+                                        <option>Employee</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+                                <!-- @MAP: employees.map(employee => ( -->
+                                <div class="border border-gray-200 rounded-lg p-4" data-mock="true">
+                                    <div class="flex items-center mb-4">
+                                        <!-- A professional headshot of a smiling business woman -->
+                                        <img src="https://pixabay.com/get/g5666e014bddf41a1772e4a29d4e16cdf2a2c1e2687b043bd4303453dd5147b8491a4ff620da9400d2cb018513420e54855394c30be285c07a71c6401ed8d38b6_1280.jpg" alt="Sarah Johnson" class="w-12 h-12 rounded-full mr-4">
+                                        <div class="flex-1">
+                                            <h4 class="text-sm font-medium text-gray-900">Sarah Johnson</h4>
+                                            <p class="text-sm text-gray-600">Marketing Manager</p>
+                                        </div>
+                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-success-100 text-success-800">Manager</span>
+                                    </div>
+                                    <div class="space-y-2 text-sm text-gray-600">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-envelope mr-2 w-4"></i>
+                                            sarah.johnson@company.com
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-phone mr-2 w-4"></i>
+                                            +1 (555) 123-4567
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-calendar mr-2 w-4"></i>
+                                            Joined: Jan 2022
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 flex space-x-2">
+                                        <button class="flex-1 text-sm bg-primary-50 text-primary-600 py-1 px-3 rounded-md hover:bg-primary-100" data-event="click:viewEmployee">View</button>
+                                        <button class="flex-1 text-sm bg-gray-50 text-gray-600 py-1 px-3 rounded-md hover:bg-gray-100" data-event="click:editEmployee">Edit</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="border border-gray-200 rounded-lg p-4" data-mock="true">
+                                    <div class="flex items-center mb-4">
+                                        <!-- A professional headshot of a smiling business man -->
+                                        <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=80&h=80" alt="Michael Chen" class="w-12 h-12 rounded-full mr-4">
+                                        <div class="flex-1">
+                                            <h4 class="text-sm font-medium text-gray-900">Michael Chen</h4>
+                                            <p class="text-sm text-gray-600">Software Developer</p>
+                                        </div>
+                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-primary-100 text-primary-800">Employee</span>
+                                    </div>
+                                    <div class="space-y-2 text-sm text-gray-600">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-envelope mr-2 w-4"></i>
+                                            michael.chen@company.com
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-phone mr-2 w-4"></i>
+                                            +1 (555) 987-6543
+                                        </div>
+                                        <div class="flex items-center">
+                                            <i class="fas fa-calendar mr-2 w-4"></i>
+                                            Joined: Mar 2023
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 flex space-x-2">
+                                        <button class="flex-1 text-sm bg-primary-50 text-primary-600 py-1 px-3 rounded-md hover:bg-primary-100" data-event="click:viewEmployee">View</button>
+                                        <button class="flex-1 text-sm bg-gray-50 text-gray-600 py-1 px-3 rounded-md hover:bg-gray-100" data-event="click:editEmployee">Edit</button>
+                                    </div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: HRModule -->
+
+                    <!-- @COMPONENT: AuditModule [Audit logs interface] -->
+                    <div id="auditModule" class="hidden space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-2xl font-medium text-gray-900">Audit Logs</h2>
+                            <div class="flex space-x-2">
+                                <input type="date" class="text-sm border border-gray-300 rounded-md px-3 py-2">
+                                <select class="text-sm border border-gray-300 rounded-md px-3 py-2">
+                                    <option>All Actions</option>
+                                    <option>Create</option>
+                                    <option>Update</option>
+                                    <option>Delete</option>
+                                </select>
+                                <button class="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 transition duration-200">
+                                    <i class="fas fa-download mr-2"></i>
+                                    Export
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Audit Summary -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-primary-100 rounded-full mr-4">
+                                        <i class="fas fa-plus text-xl text-primary-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Created</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="audit.created" data-mock="true">245</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-warning-100 rounded-full mr-4">
+                                        <i class="fas fa-edit text-xl text-warning-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Updated</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="audit.updated" data-mock="true">189</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-error-100 rounded-full mr-4">
+                                        <i class="fas fa-trash text-xl text-error-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Deleted</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="audit.deleted" data-mock="true">23</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-material-1 p-6">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-success-100 rounded-full mr-4">
+                                        <i class="fas fa-eye text-xl text-success-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600">Viewed</p>
+                                        <p class="text-2xl font-bold text-gray-900" data-bind="audit.viewed" data-mock="true">1,456</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Audit Log Entries -->
+                        <div class="bg-white rounded-lg shadow-material-1 overflow-hidden">
+                            <div class="px-6 py-4 border-b border-gray-200">
+                                <h3 class="text-lg font-medium text-gray-900">Recent Activity Log</h3>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resource</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        <!-- @MAP: auditLogs.map(log => ( -->
+                                        <tr data-mock="true">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-01-16 14:23:15</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Sarah Johnson</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-success-100 text-success-800">CREATE</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Order #ORD-2024-001</td>
+                                            <td class="px-6 py-4 text-sm text-gray-900">Created new sales order for $1,250.00</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">192.168.1.45</td>
+                                        </tr>
+                                        <tr data-mock="true">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-01-16 13:45:22</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Michael Chen</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-warning-100 text-warning-800">UPDATE</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Inventory Item #LAP-001</td>
+                                            <td class="px-6 py-4 text-sm text-gray-900">Updated stock quantity from 30 to 25</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">192.168.1.67</td>
+                                        </tr>
+                                        <tr data-mock="true">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-01-16 12:18:03</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Admin User</td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-primary-100 text-primary-800">CREATE</span>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Employee #EMP-127</td>
+                                            <td class="px-6 py-4 text-sm text-gray-900">Added new employee Mike Davis as Manager</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">192.168.1.10</td>
+                                        </tr>
+                                        <!-- @END_MAP )) -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: AuditModule -->
+                    
+                </main>
+                <!-- @END_COMPONENT: ContentArea -->
+                
+            </div>
+            <!-- @END_COMPONENT: MainContent -->
+            
+        </div>
+        <!-- @END_COMPONENT: MainLayout -->
+        
+    </div>
+    <!-- @END_COMPONENT: App -->
+
+    <script>
+        // TODO: Implement Redux store, API calls, and state management
+        
+        (function() {
+            // Initialize charts when dashboard is loaded
+            function initCharts() {
+                // Revenue Chart
+                const revenueCtx = document.getElementById('revenueChart');
+                if (revenueCtx) {
+                    new Chart(revenueCtx, {
+                        type: 'line',
+                        data: {
+                            labels: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'],
+                            datasets: [{
+                                label: 'Revenue',
+                                data: [85000, 92000, 88000, 115000, 105000, 124500],
+                                borderColor: '#1976d2',
+                                backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return '$' + value.toLocaleString();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Category Chart
+                const categoryCtx = document.getElementById('categoryChart');
+                if (categoryCtx) {
+                    new Chart(categoryCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Electronics', 'Furniture', 'Clothing', 'Books', 'Other'],
+                            datasets: [{
+                                data: [35, 25, 20, 12, 8],
+                                backgroundColor: [
+                                    '#1976d2',
+                                    '#dc004e',
+                                    '#2e7d32',
+                                    '#ed6c02',
+                                    '#757575'
+                                ]
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'right'
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Expense Category Chart
+                const expenseCategoryCtx = document.getElementById('expenseCategoryChart');
+                if (expenseCategoryCtx) {
+                    new Chart(expenseCategoryCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Marketing', 'IT', 'Office Supplies', 'Travel', 'Utilities', 'Other'],
+                            datasets: [{
+                                label: 'Expenses',
+                                data: [4500, 3200, 1800, 2100, 1200, 800],
+                                backgroundColor: '#1976d2',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return '$' + value.toLocaleString();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Module switching functionality
+            window.switchModule = function(moduleName) {
+                // Hide all modules
+                const modules = ['dashboard', 'inventory', 'sales', 'expenses', 'hr', 'audit'];
+                modules.forEach(module => {
+                    const element = document.getElementById(module + 'Module');
+                    if (element) {
+                        element.classList.add('hidden');
+                    }
+                });
+
+                // Show selected module
+                const selectedModule = document.getElementById(moduleName + 'Module');
+                if (selectedModule) {
+                    selectedModule.classList.remove('hidden');
+                }
+
+                // Update navigation active state
+                const navLinks = document.querySelectorAll('nav a');
+                navLinks.forEach(link => {
+                    link.classList.remove('text-primary-600', 'bg-primary-50', 'font-medium');
+                    link.classList.add('text-gray-600');
+                });
+
+                // Set active navigation
+                const activeLink = event.target.closest('a');
+                if (activeLink) {
+                    activeLink.classList.remove('text-gray-600');
+                    activeLink.classList.add('text-primary-600', 'bg-primary-50', 'font-medium');
+                }
+
+                // Update header title and breadcrumb
+                const moduleTitle = document.getElementById('moduleTitle');
+                const breadcrumbCurrent = document.getElementById('breadcrumbCurrent');
+                const titles = {
+                    'dashboard': 'Dashboard',
+                    'inventory': 'Inventory Management',
+                    'sales': 'Sales & Orders',
+                    'expenses': 'Expense Management',
+                    'hr': 'Employee Management',
+                    'audit': 'Audit Logs'
+                };
+                
+                if (moduleTitle && breadcrumbCurrent) {
+                    moduleTitle.textContent = titles[moduleName] || 'Dashboard';
+                    breadcrumbCurrent.textContent = titles[moduleName] || 'Dashboard';
+                }
+            };
+
+            // Show dashboard (login simulation)
+            window.showDashboard = function() {
+                document.getElementById('authContainer').classList.add('hidden');
+                document.getElementById('mainLayout').classList.remove('hidden');
+                
+                // Initialize charts after showing dashboard
+                setTimeout(initCharts, 100);
+            };
+
+            // Show login screen initially
+            document.getElementById('authContainer').classList.remove('hidden');
+            document.getElementById('mainLayout').classList.add('hidden');
+        })();
+    </script>
+</body>
+</html>

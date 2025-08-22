@@ -1,15 +1,14 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import express, { type Express } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { storage } from "./storage";
-import { User as SelectUser } from "@shared/schema";
-
+import { storage } from "./storage.ts";
+import type { User as AppUser } from "../shared/schema.ts";
 declare global {
   namespace Express {
-    interface User extends SelectUser {}
+    interface User extends AppUser {}
   }
 }
 
@@ -30,7 +29,7 @@ async function comparePasswords(supplied: string, stored: string) {
 
 export function setupAuth(app: Express) {
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET!,
+    secret: process.env.SESSION_SECRET|| "dev-secret",
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
@@ -52,7 +51,7 @@ export function setupAuth(app: Express) {
     }),
   );
 
-  passport.serializeUser((user, done) => done(null, user.id));
+  passport.serializeUser((user: Express.User, done) => done(null, user.id));
   passport.deserializeUser(async (id: string, done) => {
     const user = await storage.getUser(id);
     done(null, user);
