@@ -11,21 +11,39 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Filter, Edit, Trash2 } from "lucide-react";
 import { RootState } from "@/store/store";
 import { setItems, setLoading, setError, setFilters } from "@/store/inventorySlice";
-import { InventoryItem } from "@shared/schema";
+import { InventoryItem } from "D:/2025/react/react dev/ErpSoul/shared/schema.js";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AddInventoryModal from "@/components/modals/add-inventory-modal";
 
 export default function InventoryModule() {
   const dispatch = useDispatch();
-  const { items, loading, filters } = useSelector((state: RootState) => state.inventory);
+  const { items = [], loading, filters } = useSelector((state: RootState) => state.inventory); // Default to empty array
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const { toast } = useToast();
 
-  const { data: inventoryData, isLoading } = useQuery<InventoryItem[]>({
+  const { data: inventoryData, isLoading } = useQuery< {items: InventoryItem[], total: number} >({
     queryKey: ['/api/inventory'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/inventory');
+      return res.data as { items: InventoryItem[], total: number };
+    },
+    // Optional: Add initialData or retry options if API is unreliable
+    // initialData: [], // Uncomment if you have a fallback
   });
+
+  const addMutation = useMutation({
+  mutationFn: async (newItem: Omit<InventoryItem, "id">) => {
+    const res = await apiRequest("POST", "/api/inventory", newItem);
+    return res.data.item; // since we wrapped in { item }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+    toast({ title: "Success", description: "Item added successfully" });
+  }
+  });
+
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -48,31 +66,48 @@ export default function InventoryModule() {
   });
 
   useEffect(() => {
-    if (inventoryData) {
-      dispatch(setItems(inventoryData));
+  if (inventoryData) {
+    console.log("📡 API response from /api/inventory:", inventoryData);
+    console.log("📡 inventoryData in React:", inventoryData);
+    dispatch(setItems(inventoryData.items));
     }
     dispatch(setLoading(isLoading));
   }, [inventoryData, isLoading, dispatch]);
 
-  const filteredItems = items.filter(item => {
-    const matchesSearch = !filters.search || 
-      item.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-      item.sku.toLowerCase().includes(filters.search.toLowerCase());
-    
-    const matchesCategory = !filters.category || filters.category === 'all' || item.category === filters.category;
-    
-    const matchesStatus = !filters.status || filters.status === 'all' ||
-      (filters.status === 'in-stock' && item.stock > item.minStock) ||
-      (filters.status === 'low-stock' && item.stock <= item.minStock && item.stock > 0) ||
-      (filters.status === 'out-of-stock' && item.stock === 0);
+  // Safely filter items, ensuring items is an array
 
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
+const filteredItems = Array.isArray(items)
+  ? items.filter(item => {
+      // Search filter
+      const matchesSearch =
+        !filters.search ||
+        item.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.sku.toLowerCase().includes(filters.search.toLowerCase());
+
+      // Category filter (all = no filtering)
+      const matchesCategory =
+        !filters.category ||
+        filters.category === "all" ||
+        item.category === filters.category;
+
+      // Status filter (all = no filtering)
+      const matchesStatus =
+        !filters.status ||
+        filters.status === "all" ||
+        (filters.status === "in-stock" && item.stock > item.minStock) ||
+        (filters.status === "low-stock" &&
+          item.stock <= item.minStock &&
+          item.stock > 0) ||
+        (filters.status === "out-of-stock" && item.stock === 0);
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    })
+  : [];
 
   const getStockStatus = (item: InventoryItem) => {
-    if (item.stock === 0) return { label: 'Out of Stock', variant: 'destructive' as const };
-    if (item.stock <= item.minStock) return { label: 'Low Stock', variant: 'secondary' as const };
-    return { label: 'In Stock', variant: 'default' as const };
+    if (item.stock === 0) return { label: 'Out of Stock', variant: 'destructive' };
+    if (item.stock <= item.minStock) return { label: 'Low Stock', variant: 'secondary' };
+    return { label: 'In Stock', variant: 'default' };
   };
 
   const handleEdit = (item: InventoryItem) => {
@@ -86,7 +121,7 @@ export default function InventoryModule() {
     }
   };
 
-  const categories = Array.from(new Set(items.map(item => item.category)));
+const categories = Array.from(new Set((Array.isArray(items) ? items : []).map(item => item.category)));
 
   return (
     <div className="space-y-6" data-testid="inventory-module">
