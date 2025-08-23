@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { InventoryItem } from '@shared/schema';
+import { InventoryItem } from 'D:/2025/react/react dev/ErpSoul/shared/schema.js';
 
 interface InventoryState {
   items: InventoryItem[];

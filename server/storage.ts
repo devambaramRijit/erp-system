@@ -112,8 +112,8 @@ class Validator {
     return password.length >= 8;
   }
 
-  static validateSKU(sku: string): boolean {
-    return /^[A-Z0-9-]+$/.test(sku);
+  static validateSKU(sku: string) {
+       return /^[A-Za-z0-9-_]+$/.test(sku);
   }
 }
 
