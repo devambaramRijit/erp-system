@@ -1,5 +1,13 @@
-node_modules
-dist
+node_modules/
+dist/
+build/
+.env
+.local
+*.log
+output.txt
+project-structure.txt
+all_files.txt
+schema.txt
 .DS_Store
 server/public
 vite.config.ts.*
