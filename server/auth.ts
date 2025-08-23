@@ -4,8 +4,8 @@ import express, { type Express } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { storage } from "./storage.ts";
-import type { User as AppUser } from "../shared/schema.ts";
+import { storage } from "./storage.js";
+import type { User as AppUser } from "../shared/schema.js";
 declare global {
   namespace Express {
     interface User extends AppUser {}

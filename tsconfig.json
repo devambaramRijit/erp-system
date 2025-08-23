@@ -1,27 +1,34 @@
 {
-  "include": ["client/src/**/*", "shared/**/*", "server/**/*","server", "client", "shared", "types"],
-  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
-    "outDir": "./dist",
-    "incremental": true,
-    "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": false,
-    "target":"esnext",
-    "module": "esnext",
-    "strict": true,
-    "lib": ["esnext", "dom", "dom.iterable"],
-    "jsx": "preserve",
-    "esModuleInterop": true,
-    "noImplicitAny": false,
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
+
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    /* Language & JSX */
+    "module": "nodenext",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "jsx": "react-jsx",
+
+    /* Paths */
     "baseUrl": ".",
-    "types": ["node", "vite/client"],
     "paths": {
-      "@/*": ["./client/src/*"],
-      "@shared/*": ["./shared/*"]
-    }
-  }
+      "@shared/*": ["shared/*"],
+      "@/*": ["src/*"]
+    },
+
+    /* Module resolution */
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+
+    /* Strictness */
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Output */
+    "isolatedModules": true,
+  },
+  "include": ["src", "shared", "vite.config.ts"],
+  "exclude": ["node_modules", "dist", "server"]
 }

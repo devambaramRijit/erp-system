@@ -1,5 +1,5 @@
-import { registerRoutes } from "./routes.ts";
-import { setupVite, serveStatic, log } from "./vite.ts";
+import { registerRoutes } from "./routes.js";
+import { setupVite, serveStatic, log } from "./vite.js";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 

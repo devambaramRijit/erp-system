@@ -2,10 +2,11 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, decimal, integer, json, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { uuid } from "drizzle-orm/pg-core";
 
 // Users table with roles
 export const User = pgTable("User", {
-  id: text(varchar("id").primaryKey().default(sql`gen_random_uuid()`)),
+  id: uuid("id").primaryKey().defaultRandom().notNull(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
@@ -19,7 +20,7 @@ export const User = pgTable("User", {
 
 // Inventory items
 export const inventoryItems = pgTable("inventory_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey().defaultRandom().notNull(),
   name: text("name").notNull(),
   description: text("description"),
   sku: text("sku").notNull().unique(),
@@ -35,7 +36,7 @@ export const inventoryItems = pgTable("inventory_items", {
 
 // Sales orders
 export const salesOrders = pgTable("sales_orders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey().defaultRandom().notNull(),
   orderNumber: text("order_number").notNull().unique(),
   customerName: text("customer_name").notNull(),
   customerEmail: text("customer_email").notNull(),
@@ -43,22 +44,26 @@ export const salesOrders = pgTable("sales_orders", {
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("pending"), // pending, completed, cancelled
   orderDate: timestamp("order_date").notNull().defaultNow(),
-  createdBy: varchar("created_by").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: uuid("created_by").notNull().references(() => User.id), // FK
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSalesOrderSchema = createInsertSchema(salesOrders).omit({
+  id: true,
+  updatedAt: true,
 });
 
 // Expenses
 export const expenses = pgTable("expenses", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description"),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   category: text("category").notNull(),
   expenseDate: timestamp("expense_date").notNull(),
   status: text("status").notNull().default("pending"), // pending, approved, rejected
-  submittedBy: varchar("submitted_by").notNull(),
-  approvedBy: varchar("approved_by"),
+  submittedBy: uuid("submitted_by").notNull(),
+  approvedBy: uuid("approved_by"),
   receiptUrl: text("receipt_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -66,8 +71,8 @@ export const expenses = pgTable("expenses", {
 
 // Audit logs
 export const auditLogs = pgTable("audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull(),
   action: text("action").notNull(), // CREATE, UPDATE, DELETE, VIEW
   resource: text("resource").notNull(), // table/entity name
   resourceId: text("resource_id").notNull(),
@@ -77,25 +82,17 @@ export const auditLogs = pgTable("audit_logs", {
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });
 
-// Insert schemas
-export const insertUserSchema = createInsertSchema(User).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
 export const insertInventoryItemSchema = createInsertSchema(inventoryItems).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export const insertSalesOrderSchema = createInsertSchema(salesOrders).omit({
+export const insertUserSchema = createInsertSchema(User).omit({
   id: true,
-  orderNumber: true,
   createdAt: true,
   updatedAt: true,
-});
+} as const);
 
 export const insertExpenseSchema = createInsertSchema(expenses).omit({
   id: true,

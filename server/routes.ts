@@ -1,13 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth } from "./auth.ts";
-import { storage } from "./storage.ts";
+import { setupAuth } from "./auth.js";
+import { storage } from "./storage.js";
 import {
   insertInventoryItemSchema,
   insertSalesOrderSchema,
   insertExpenseSchema,
   insertUserSchema
-} from "../shared/schema.ts";
+} from "../shared/schema.js";
 import { z } from "zod";
 
 // Extend Express Request to include `user`

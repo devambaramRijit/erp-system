@@ -9,7 +9,7 @@ import {
   type InsertExpense,
   type AuditLog,
   type InsertAuditLog
-} from "../shared/schema.ts";
+} from "../shared/schema.js";
 import { randomUUID } from "crypto";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -388,13 +388,11 @@ async deleteInventoryItem(id: string, transactionId?: string): Promise<boolean> 
     const id = randomUUID();
     const orderNumber = `ORD-${new Date().getFullYear()}-${String(this.orderCounter++).padStart(3, '0')}`;
     const order: SalesOrder = { 
-      ...insertOrder,
       id,
-      orderNumber,
-      status: insertOrder.status || "pending",
-      orderDate: insertOrder.orderDate || new Date(),
-      createdAt: new Date(),
+      status:  "pending",
+      orderDate: new Date(),
       updatedAt: new Date(),
+      ...insertOrder,
     };
 
     const operation = async () => {

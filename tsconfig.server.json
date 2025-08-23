@@ -1,31 +1,39 @@
 {
   "compilerOptions": {
-    /* Language and module settings */
-    "target": "es2020",
-    "module": "Node16",
+    /* Language and module */
+    "module": "NodeNext",
     "moduleResolution": "NodeNext",
 
     /* Output and root directories */
     "outDir": "./dist/server",
-    "rootDir": ".",
-
-    /* Path mapping */
-    "baseUrl": ".",
+    "rootDir": ".", // Changed to project root to include shared/ and vite.config.ts
+    "baseUrl": ".", // Keep baseUrl at project root
     "paths": {
-      "@shared/*": ["shared/*"]
+      "@shared/*": ["shared/*"] // Relative to baseUrl
     },
 
-    /* Interop and compatibility */
+    /* Interop */
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
 
     /* Type checking */
     "strict": true,
-    "skipLibCheck": true
-  },
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
 
-  /* Files included in compilation */
+    /* Output settings */
+    "target": "ESNext",
+    "sourceMap": true
+  },
   "include": [
-    "server/**/*.ts",
-    "shared/**/*"
+    "server/**/*.ts", // Server files
+    "shared/**/*.ts" // Shared files
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src",
+    "client", // Exclude client directory
+    "vite.config.ts" // Exclude vite.config.ts from server build
   ]
 }
