@@ -1,0 +1,25 @@
+{
+  "files": [],
+  "references": [
+    { "path": "../apps/client" },
+    { "path": "../apps/server" },
+    { "path": "../packages/shared" }
+  ],
+  "compilerOptions": {
+    // Common settings for all sub-projects
+    "target": "esnext",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    // Monorepo path aliases
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../packages/shared/*"]
+    }
+  }
+}

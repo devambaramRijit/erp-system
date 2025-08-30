@@ -1,0 +1,18 @@
+{
+  "name": "erpsoul-refactored",
+  "private": true,
+  "workspaces": [
+    "apps/client",
+    "apps/server",
+    "apps/packages/shared"
+  ],
+  "scripts": {
+  "build": "npm run build --workspaces",
+  "start": "node apps/server/dist/index.js",
+  "dev": "concurrently \"npm run dev:server\" \"npm run dev --workspace=apps/client\"",
+  "dev:server": "ts-node-dev --transpile-only --project apps/server/tsconfig.json apps/server/src/index.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

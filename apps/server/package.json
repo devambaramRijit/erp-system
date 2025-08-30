@@ -1,0 +1,11 @@
+{
+  "name": "erp-server",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/basic-server.js",
+  "scripts": {
+    "dev": "node --trace-deprecation src/basic-server.js",
+    "start": "node src/basic-server.js"
+  },
+  "dependencies": {}
+}

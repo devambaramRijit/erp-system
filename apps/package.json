@@ -1,0 +1,14 @@
+{
+  "name": "erp-soul",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "pnpm --filter server dev",
+    "dev:client": "pnpm --filter client dev",
+    "build": "pnpm -r build",
+    "lint": "eslint . --ext .ts,.tsx"
+  }
+}
