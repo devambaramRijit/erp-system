@@ -1,17 +1,44 @@
 const http = require('http');
 const url = require('url');
 const querystring = require('querystring');
+const fs = require('fs');
+const path = require('path');
 
-// Mock inventory data
-let inventoryItems = [
+// File path for inventory data storage
+const inventoryFilePath = path.join(__dirname, 'inventory-data.json');
+
+// Function to save inventory data to file
+function saveInventoryToFile() {
+  try {
+    fs.writeFileSync(inventoryFilePath, JSON.stringify(inventoryItems, null, 2));
+  } catch (err) {
+    console.error('Error saving inventory data to file:', err);
+  }
+}
+
+// Function to load inventory data from file
+function loadInventoryFromFile() {
+  try {
+    if (fs.existsSync(inventoryFilePath)) {
+      const data = fs.readFileSync(inventoryFilePath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Error loading inventory data from file:', err);
+  }
+  return null; // Return null if file doesn't exist or there's an error
+}
+
+// Default inventory data
+const defaultInventoryItems = [
   {
     id: '1',
     sku: 'ITEM001',
     name: 'Laptop Computer',
-    description: 'High-performance laptop for business use',
+    size: '15 inch',
+    unit: 'pieces',
     quantity: 15,
     price: 999.99,
-    category: 'Electronics',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
@@ -19,10 +46,10 @@ let inventoryItems = [
     id: '2',
     sku: 'ITEM002',
     name: 'Office Chair',
-    description: 'Ergonomic office chair with lumbar support',
+    size: 'Standard',
+    unit: 'pieces',
     quantity: 32,
     price: 249.99,
-    category: 'Furniture',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
@@ -30,10 +57,10 @@ let inventoryItems = [
     id: '3',
     sku: 'ITEM003',
     name: 'Wireless Mouse',
-    description: 'Bluetooth wireless mouse with precision tracking',
+    size: 'Ergonomic',
+    unit: 'pieces',
     quantity: 75,
     price: 29.99,
-    category: 'Electronics',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
@@ -41,14 +68,17 @@ let inventoryItems = [
     id: '4',
     sku: 'ITEM004',
     name: 'Desk Lamp',
-    description: 'LED desk lamp with adjustable brightness',
+    size: 'LED',
+    unit: 'pieces',
     quantity: 24,
     price: 49.99,
-    category: 'Office Supplies',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   }
 ];
+
+// Load inventory from file or use default data
+let inventoryItems = loadInventoryFromFile() || defaultInventoryItems;
 
 // Mock user sessions
 const sessions = {};
@@ -183,15 +213,17 @@ const server = http.createServer((req, res) => {
     parseBody(req, (err, body) => {
       if (err) {
         res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
         return;
       }
 
-      const { sku, name, description, quantity, price, category } = body;
+      const { sku, name, size, unit, quantity, price } = body;
 
-      if (!sku || !name || !category) {
+      if (!sku || !name || !size || !unit || quantity === undefined || quantity === null || price === undefined || price === null) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ message: 'SKU, name, and category are required' }));
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ message: 'All fields are required' }));
         return;
       }
 
@@ -199,16 +231,18 @@ const server = http.createServer((req, res) => {
         id: Math.random().toString(36).substr(2, 9),
         sku,
         name,
-        description: description || '',
+        size,
+        unit,
         quantity: Number(quantity) || 0,
         price: Number(price) || 0,
-        category,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
       inventoryItems.push(newItem);
+      saveInventoryToFile(); // Save to file after adding new item
       res.statusCode = 201;
+      res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(newItem));
     });
   }
@@ -229,11 +263,12 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      const { sku, name, description, quantity, price, category } = body;
+      const { sku, name, size, unit, quantity, price } = body;
 
-      if (!sku || !name || !category) {
+      if (!sku || !name || !size || !unit || quantity === undefined || quantity === null || price === undefined || price === null) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ message: 'SKU, name, and category are required' }));
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ message: 'All fields are required' }));
         return;
       }
 
@@ -241,13 +276,13 @@ const server = http.createServer((req, res) => {
         ...inventoryItems[itemIndex],
         sku,
         name,
-        description: description || inventoryItems[itemIndex].description,
+        size,
+        unit,
         quantity: Number(quantity) || inventoryItems[itemIndex].quantity,
         price: Number(price) || inventoryItems[itemIndex].price,
-        category,
         updatedAt: new Date().toISOString()
       };
-
+      saveInventoryToFile(); // Save to file after updating item
       res.end(JSON.stringify(inventoryItems[itemIndex]));
     });
   }
@@ -262,6 +297,7 @@ const server = http.createServer((req, res) => {
     }
 
     inventoryItems.splice(itemIndex, 1);
+    saveInventoryToFile(); // Save to file after deleting item
     res.statusCode = 204;
     res.end();
   }

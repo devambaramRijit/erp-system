@@ -3,6 +3,8 @@ import axios from 'axios';
 import { LoginForm } from './components/LoginForm';
 import { Dashboard } from './pages/Dashboard';
 import InventoryScreen from './InventoryScreen';
+import InvoiceScreen from './InvoiceScreen';
+import CustomerScreen from './CustomerScreen';
 
 function App() {
   const [user, setUser] = useState<any>(null);
@@ -83,16 +85,40 @@ function App() {
       </div>
 
       {/* Navigation Tabs */}
-      <div style={{ display: 'flex', marginBottom: 20, borderBottom: '1px solid #ddd' }}>
+      <div style={{ 
+        display: 'flex', 
+        marginBottom: 20, 
+        borderBottom: '1px solid #ddd',
+        position: 'relative'
+      }}>
         <button
           onClick={() => setActiveTab('dashboard')}
           style={{
-            padding: '10px 20px',
-            backgroundColor: activeTab === 'dashboard' ? '#f8f9fa' : 'transparent',
-            border: 'none',
-            borderBottom: activeTab === 'dashboard' ? '2px solid #007bff' : 'none',
+            padding: activeTab === 'dashboard' ? '16px 24px' : '6px 24px',
+            backgroundColor: activeTab === 'dashboard' ? 'white' : '#f9f9f9',
+            border: activeTab === 'dashboard' ? '1px solid #ddd' : '1px solid transparent',
+            borderBottom: activeTab === 'dashboard' ? '2px solid white' : '1px solid transparent',
+            borderRadius: activeTab === 'dashboard' ? '6px 6px 0 0' : '4px',
             cursor: 'pointer',
-            fontWeight: activeTab === 'dashboard' ? 'bold' : 'normal'
+            fontWeight: activeTab === 'dashboard' ? 'bold' : 'normal',
+            color: activeTab === 'dashboard' ? '#333' : '#666',
+            boxShadow: activeTab === 'dashboard' ? '0 -2px 4px rgba(0,0,0,0.1)' : 'none',
+            position: 'relative',
+            top: activeTab === 'dashboard' ? '1px' : '0',
+            transition: 'all 0.2s ease',
+            zIndex: activeTab === 'dashboard' ? '2' : '1'
+          }}
+          onMouseOver={(e) => {
+            if (activeTab !== 'dashboard') {
+              e.currentTarget.style.backgroundColor = '#f1f1f1';
+              e.currentTarget.style.color = '#333';
+            }
+          }}
+          onMouseOut={(e) => {
+            if (activeTab !== 'dashboard') {
+              e.currentTarget.style.backgroundColor = '#f9f9f9';
+              e.currentTarget.style.color = '#666';
+            }
           }}
         >
           Dashboard
@@ -100,15 +126,98 @@ function App() {
         <button
           onClick={() => setActiveTab('inventory')}
           style={{
-            padding: '10px 20px',
-            backgroundColor: activeTab === 'inventory' ? '#f8f9fa' : 'transparent',
-            border: 'none',
-            borderBottom: activeTab === 'inventory' ? '2px solid #007bff' : 'none',
+            padding: activeTab === 'inventory' ? '16px 24px' : '6px 24px',
+            backgroundColor: activeTab === 'inventory' ? 'white' : '#f9f9f9',
+            border: activeTab === 'inventory' ? '1px solid #ddd' : '1px solid transparent',
+            borderBottom: activeTab === 'inventory' ? '2px solid white' : '1px solid transparent',
+            borderRadius: activeTab === 'inventory' ? '6px 6px 0 0' : '4px',
             cursor: 'pointer',
-            fontWeight: activeTab === 'inventory' ? 'bold' : 'normal'
+            fontWeight: activeTab === 'inventory' ? 'bold' : 'normal',
+            color: activeTab === 'inventory' ? '#333' : '#666',
+            boxShadow: activeTab === 'inventory' ? '0 -2px 4px rgba(0,0,0,0.1)' : 'none',
+            position: 'relative',
+            top: activeTab === 'inventory' ? '1px' : '0',
+            transition: 'all 0.2s ease',
+            zIndex: activeTab === 'inventory' ? '2' : '1'
+          }}
+          onMouseOver={(e) => {
+            if (activeTab !== 'inventory') {
+              e.currentTarget.style.backgroundColor = '#f1f1f1';
+              e.currentTarget.style.color = '#333';
+            }
+          }}
+          onMouseOut={(e) => {
+            if (activeTab !== 'inventory') {
+              e.currentTarget.style.backgroundColor = '#f9f9f9';
+              e.currentTarget.style.color = '#666';
+            }
           }}
         >
-          Inventory Management
+          Product List Tab
+        </button>
+        <button
+          onClick={() => setActiveTab('invoice')}
+          style={{
+            padding: activeTab === 'invoice' ? '16px 24px' : '6px 24px',
+            backgroundColor: activeTab === 'invoice' ? 'white' : '#f9f9f9',
+            border: activeTab === 'invoice' ? '1px solid #ddd' : '1px solid transparent',
+            borderBottom: activeTab === 'invoice' ? '2px solid white' : '1px solid transparent',
+            borderRadius: activeTab === 'invoice' ? '6px 6px 0 0' : '4px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'invoice' ? 'bold' : 'normal',
+            color: activeTab === 'invoice' ? '#333' : '#666',
+            boxShadow: activeTab === 'invoice' ? '0 -2px 4px rgba(0,0,0,0.1)' : 'none',
+            position: 'relative',
+            top: activeTab === 'invoice' ? '1px' : '0',
+            transition: 'all 0.2s ease',
+            zIndex: activeTab === 'invoice' ? '2' : '1'
+          }}
+          onMouseOver={(e) => {
+            if (activeTab !== 'invoice') {
+              e.currentTarget.style.backgroundColor = '#f1f1f1';
+              e.currentTarget.style.color = '#333';
+            }
+          }}
+          onMouseOut={(e) => {
+            if (activeTab !== 'invoice') {
+              e.currentTarget.style.backgroundColor = '#f9f9f9';
+              e.currentTarget.style.color = '#666';
+            }
+          }}
+        >
+          Invoice Generation
+        </button>
+        <button
+          onClick={() => setActiveTab('customers')}
+          style={{
+            padding: activeTab === 'customers' ? '16px 24px' : '6px 24px',
+            backgroundColor: activeTab === 'customers' ? 'white' : '#f9f9f9',
+            border: activeTab === 'customers' ? '1px solid #ddd' : '1px solid transparent',
+            borderBottom: activeTab === 'customers' ? '2px solid white' : '1px solid transparent',
+            borderRadius: activeTab === 'customers' ? '6px 6px 0 0' : '4px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'customers' ? 'bold' : 'normal',
+            color: activeTab === 'customers' ? '#333' : '#666',
+            boxShadow: activeTab === 'customers' ? '0 -2px 4px rgba(0,0,0,0.1)' : 'none',
+            position: 'relative',
+            top: activeTab === 'customers' ? '1px' : '0',
+            transition: 'all 0.2s ease',
+            zIndex: activeTab === 'customers' ? '2' : '1'
+          }}
+          onMouseOver={(e) => {
+            if (activeTab !== 'customers') {
+              e.currentTarget.style.backgroundColor = '#f1f1f1';
+              e.currentTarget.style.color = '#333';
+            }
+          }}
+          onMouseOut={(e) => {
+            if (activeTab !== 'customers') {
+              e.currentTarget.style.backgroundColor = '#f9f9f9';
+              e.currentTarget.style.color = '#666';
+            }
+          }}
+        >
+          Customer Management
         </button>
       </div>
 
@@ -116,6 +225,8 @@ function App() {
       <div>
         {activeTab === 'dashboard' && <Dashboard user={user} onLogout={handleLogout} />}
         {activeTab === 'inventory' && <InventoryScreen />}
+        {activeTab === 'invoice' && <InvoiceScreen />}
+        {activeTab === 'customers' && <CustomerScreen />}
       </div>
     </div>
   );

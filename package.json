@@ -7,12 +7,18 @@
     "apps/packages/shared"
   ],
   "scripts": {
-  "build": "npm run build --workspaces",
-  "start": "node apps/server/dist/index.js",
-  "dev": "concurrently \"npm run dev:server\" \"npm run dev --workspace=apps/client\"",
-  "dev:server": "ts-node-dev --transpile-only --project apps/server/tsconfig.json apps/server/src/index.ts"
+    "build": "npm run build --workspaces",
+    "start": "node apps/server/dist/index.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev --workspace=apps/client\"",
+    "dev:server": "ts-node-dev --transpile-only --project apps/server/tsconfig.json apps/server/src/index.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.0.0",
+    "antd": "^5.27.2",
+    "react-to-print": "^3.1.1",
+    "xlsx": "^0.18.5"
   }
 }
