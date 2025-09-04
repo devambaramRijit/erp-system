@@ -3,7 +3,55 @@ import React, { useState, useRef } from 'react';
 import { Button, Form, Input, Select, Table, InputNumber, Modal, message, Card, Row, Col, Divider, Space, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, SaveOutlined } from '@ant-design/icons';
 import { useReactToPrint } from 'react-to-print';
+import { CustomerData } from './services/mockApi';
+import ProductDetailsSection from './ProductDetailsSection';
 import './InvoiceScreen.css';
+
+// Add custom styles for the product dropdown
+const productDropdownStyles = `
+  /* Product dropdown in Add/Edit Item modal */
+  .ant-modal .ant-select-dropdown {
+    min-width: 550px !important;
+    max-width: 650px !important;
+  }
+  
+  .ant-modal .ant-select-item {
+    height: auto !important;
+    min-height: 100px !important;
+    padding: 12px 15px !important;
+    line-height: 1.5 !important;
+    white-space: normal !important;
+  }
+  
+  .ant-modal .ant-select-item-option-content {
+    padding: 6px 0 !important;
+  }
+  
+  .ant-modal .ant-select-item-option-content div {
+    margin-bottom: 4px !important;
+  }
+  
+  /* Ensure dropdown appears above modal */
+  .ant-modal .ant-select-dropdown {
+    z-index: 1050 !important;
+  }
+  
+  /* Fix for the selected item display - show only product name */
+  .ant-modal .ant-select-selection-item {
+    height: auto !important;
+    min-height: 32px !important;
+    padding: 4px 8px !important;
+    line-height: 1.4 !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+    overflow: hidden !important;
+  }
+`;
+
+// Create style element and append to head
+const styleElement = document.createElement('style');
+styleElement.innerHTML = productDropdownStyles;
+document.head.appendChild(styleElement);
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -42,6 +90,7 @@ interface Invoice {
   subtotal: number;
   discountRate: number;
   discountAmount: number;
+  advancePayment: number;
   shippingCharges: number;
   packingCharges: number;
   total: number;
@@ -52,8 +101,15 @@ const InvoiceScreen: React.FC = () => {
   const [form] = Form.useForm();
   const [itemForm] = Form.useForm();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productTypes, setProductTypes] = useState<string[]>(() => {
+    const savedProductTypes = localStorage.getItem('inventoryProductTypes');
+    return savedProductTypes ? JSON.parse(savedProductTypes) : ['Standard', 'Premium', 'Custom'];
+  });
+  const [selectedProductType, setSelectedProductType] = useState<string>('');
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [discountType, setDiscountType] = useState<'percentage' | 'decimal'>('percentage');
   const [visible, setVisible] = useState(false);
   const [itemVisible, setItemVisible] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -62,40 +118,123 @@ const InvoiceScreen: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
+  // Load current invoice from localStorage on component mount
+  React.useEffect(() => {
+    const savedCurrentInvoice = localStorage.getItem('currentInvoice');
+    if (savedCurrentInvoice) {
+      try {
+        const parsedInvoice = JSON.parse(savedCurrentInvoice);
+        setCurrentInvoice(parsedInvoice);
+        form.setFieldsValue(parsedInvoice);
+      } catch (error) {
+        console.error('Error parsing saved invoice:', error);
+      }
+    }
+
+    // Load invoices from localStorage
+    const savedInvoices = localStorage.getItem('invoices');
+    if (savedInvoices) {
+      try {
+        const parsedInvoices = JSON.parse(savedInvoices);
+        setInvoices(parsedInvoices);
+      } catch (error) {
+        console.error('Error parsing saved invoices:', error);
+      }
+    }
+  }, []);
+
+  // Save current invoice to localStorage whenever it changes
+  React.useEffect(() => {
+    if (currentInvoice) {
+      localStorage.setItem('currentInvoice', JSON.stringify(currentInvoice));
+    }
+  }, [currentInvoice]);
+
+  // Save invoices to localStorage whenever they change
+  React.useEffect(() => {
+    localStorage.setItem('invoices', JSON.stringify(invoices));
+  }, [invoices]);
+
   // Sample data
   React.useEffect(() => {
-    // Mock customers data
-    const mockCustomers = [
-      {
-        id: '1',
-        customerName: 'John Doe',
-        mobileNumber1: '1234567890',
-        email: 'john@example.com',
-        billingAddress: '123 Main St, City, Country',
-        shippingAddress: '123 Main St, City, Country',
-        city: 'City',
-        state: 'State',
-      },
-      {
-        id: '2',
-        customerName: 'Jane Smith',
-        mobileNumber1: '9876543210',
-        email: 'jane@example.com',
-        billingAddress: '456 Oak Ave, Town, Country',
-        shippingAddress: '456 Oak Ave, Town, Country',
-        city: 'Town',
-        state: 'State',
-      },
-    ];
-    setCustomers(mockCustomers);
+    // Load customers from localStorage
+    const savedCustomers = localStorage.getItem('mockCustomers');
+    if (savedCustomers) {
+      const customersData = JSON.parse(savedCustomers);
+      setCustomers(customersData);
+    } else {
+      // Fallback to mock customers if no data in localStorage
+      const mockCustomers: CustomerData[] = [
+        {
+          id: '1',
+          customerName: 'John Doe',
+          houseNumber: '123 Main St',
+          city: 'City',
+          district: 'District',
+          state: 'State',
+          pinCode: '12345',
+          landmark: 'Near Landmark',
+          mobileNumber1: '1234567890',
+          mobileNumber2: '',
+          source: 'Direct',
+        },
+        {
+          id: '2',
+          customerName: 'Jane Smith',
+          houseNumber: '456 Oak Ave',
+          city: 'Town',
+          district: 'District',
+          state: 'State',
+          pinCode: '67890',
+          landmark: 'Near Park',
+          mobileNumber1: '9876543210',
+          mobileNumber2: '',
+          source: 'Referral',
+        },
+      ];
+      setCustomers(mockCustomers);
+    }
 
-    // Mock products data
-    const mockProducts: Product[] = [
-      { id: '1', name: 'Product A', unit: 'pcs', price: 10.99, category: 'Electronics' },
-      { id: '2', name: 'Product B', unit: 'kg', price: 5.99, category: 'Groceries' },
-      { id: '3', name: 'Product C', unit: 'ltr', price: 7.99, category: 'Beverages' },
-    ];
-    setProducts(mockProducts);
+    // Load products and categories from API (same as SecondProductListTab)
+    const fetchData = async () => {
+      try {
+        // Fetch products
+        const productsResponse = await api.get('/inventory');
+        // Transform the data to match our Product interface
+        const transformedProducts = productsResponse.map((item: any) => ({
+          id: item.id,
+          sku: item.sku,
+          name: item.name,
+          size: '',
+          unit: 'pcs',
+          quantity: item.quantity,
+          price: item.price,
+          productType: item.productType || 'Traded',
+          category: item.category || 'General'
+        }));
+        setProducts(transformedProducts);
+        
+        // Extract unique categories from products
+        const uniqueCategories = Array.from(new Set(transformedProducts.map(p => p.category).filter(Boolean))) as string[];
+        if (uniqueCategories.length > 0) {
+          setProductTypes(uniqueCategories);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        // Fallback to mock data if API fails
+        const mockProducts: Product[] = [
+          { id: '1', sku: 'SKU001', name: 'Product A', size: '', unit: 'pcs', quantity: 100, price: 10.99, productType: 'Electronics' },
+          { id: '2', sku: 'SKU002', name: 'Product B', size: '', unit: 'kg', quantity: 50, price: 5.99, productType: 'Groceries' },
+          { id: '3', sku: 'SKU003', name: 'Product C', size: '', unit: 'ltr', quantity: 30, price: 7.99, productType: 'Beverages' },
+        ];
+        setProducts(mockProducts);
+        
+        // Set default categories
+        setProductTypes(['Electronics', 'Groceries', 'Beverages']);
+      }
+    };
+    
+    fetchData();
   }, []);
 
   const handlePrint = useReactToPrint({
@@ -124,6 +263,7 @@ const InvoiceScreen: React.FC = () => {
       subtotal: 0,
       discountRate: 0,
       discountAmount: 0,
+      advancePayment: 0,
       shippingCharges: 0,
       packingCharges: 0,
       total: 0,
@@ -157,14 +297,20 @@ const InvoiceScreen: React.FC = () => {
           };
 
           if (editingInvoice) {
-            setInvoices(invoices.map(invoice => invoice.id === editingInvoice.id ? updatedInvoice : invoice));
+            const updatedInvoices = invoices.map(invoice => invoice.id === editingInvoice.id ? updatedInvoice : invoice);
+            setInvoices(updatedInvoices);
+            localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
             message.success('Invoice updated successfully');
           } else {
-            setInvoices([...invoices, updatedInvoice]);
+            const newInvoices = [...invoices, updatedInvoice];
+            setInvoices(newInvoices);
+            localStorage.setItem('invoices', JSON.stringify(newInvoices));
             message.success('Invoice added successfully');
           }
 
           setVisible(false);
+          // Clear the current invoice from localStorage after saving
+          localStorage.removeItem('currentInvoice');
         }
       })
       .catch(info => {
@@ -174,6 +320,8 @@ const InvoiceScreen: React.FC = () => {
 
   const handleAddItem = () => {
     itemForm.resetFields();
+    setSelectedProductType('');
+    setFilteredProducts([]);
     setItemVisible(true);
   };
 
@@ -200,7 +348,7 @@ const InvoiceScreen: React.FC = () => {
                 quantity: values.quantity,
                 price: product.price,
                 total: total,
-                productCategory: values.productCategory || product.category || '',
+                productCategory: values.productCategory || product.productType || '',
                 pricePerInch: pricePerInch,
                 size: size,
                 cpPerPc: cpPerPc,
@@ -214,22 +362,33 @@ const InvoiceScreen: React.FC = () => {
                 quantity: values.quantity,
                 price: product.price,
                 total: product.price * values.quantity,
-                productCategory: values.productCategory || product.category || '',
+                productCategory: values.productCategory || product.productType || '',
               };
             }
 
             const updatedItems = [...currentInvoice.items, newItem];
             const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-            const discountAmount = (subtotal * currentInvoice.discountRate) / 100;
-            const total = subtotal - discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+            const subtotalAfterAdvance = subtotal - (currentInvoice.advancePayment || 0);
+            let discountAmount;
+            
+            if (discountType === 'percentage') {
+              // Calculate discount as percentage of subtotal
+              discountAmount = (subtotalAfterAdvance * currentInvoice.discountRate) / 100;
+            } else {
+              // Use discount as fixed decimal amount
+              discountAmount = currentInvoice.discountRate;
+            }
+            const total = subtotalAfterAdvance - discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges;
 
-            setCurrentInvoice({
+            const updatedInvoice = {
               ...currentInvoice,
               items: updatedItems,
               subtotal,
               discountAmount,
               total,
-            });
+            };
+            setCurrentInvoice(updatedInvoice);
+            localStorage.setItem('currentInvoice', JSON.stringify(updatedInvoice));
 
             setItemVisible(false);
           }
@@ -244,23 +403,150 @@ const InvoiceScreen: React.FC = () => {
     if (currentInvoice) {
       const updatedItems = currentInvoice.items.filter(item => item.id !== id);
       const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
-      const discountAmount = (subtotal * currentInvoice.discountRate) / 100;
-      const total = subtotal - discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+      const subtotalAfterAdvance = subtotal - (currentInvoice.advancePayment || 0);
+      let discountAmount;
+      
+      if (discountType === 'percentage') {
+        // Calculate discount as percentage of subtotal
+        discountAmount = (subtotalAfterAdvance * currentInvoice.discountRate) / 100;
+      } else {
+        // Use discount as fixed decimal amount
+        discountAmount = currentInvoice.discountRate;
+      }
+      const total = subtotalAfterAdvance - discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges;
 
-      setCurrentInvoice({
+      const updatedInvoice = {
         ...currentInvoice,
         items: updatedItems,
         subtotal,
         discountAmount,
         total,
-      });
+      };
+      setCurrentInvoice(updatedInvoice);
+      localStorage.setItem('currentInvoice', JSON.stringify(updatedInvoice));
     }
+  };
+
+  const handleEditItem = (item: InvoiceItem) => {
+    if (currentInvoice) {
+      // Find the product to get its details
+      const product = products.find(p => p.id === item.productId);
+      if (product) {
+        // Set form values with current item data
+        itemForm.setFieldsValue({
+          productId: item.productId,
+          productCategory: item.productCategory || product.productType || '',
+          quantity: item.quantity,
+          ...(currentInvoice.invoiceType === 'manufactured' && {
+            pricePerInch: item.pricePerInch,
+            size: item.size
+          })
+        });
+        
+        // Store the item ID being edited
+        itemForm.setFieldsValue({ editingItemId: item.id });
+        
+        // Open the item modal
+        setItemVisible(true);
+      }
+    }
+  };
+
+  const handleUpdateItem = () => {
+    itemForm
+      .validateFields()
+      .then(values => {
+        if (currentInvoice) {
+          const editingItemId = values.editingItemId;
+          const product = products.find(p => p.id === values.productId);
+          
+          if (product && editingItemId) {
+            // Find the item being edited
+            const itemIndex = currentInvoice.items.findIndex(item => item.id === editingItemId);
+            
+            if (itemIndex !== -1) {
+              let updatedItem: InvoiceItem;
+              
+              if (currentInvoice.invoiceType === 'manufactured') {
+                const pricePerInch = values.pricePerInch || 0;
+                const size = values.size || 0;
+                const cpPerPc = pricePerInch * size;
+                const total = cpPerPc * values.quantity;
+                
+                updatedItem = {
+                  ...currentInvoice.items[itemIndex],
+                  productId: values.productId,
+                  name: product.name,
+                  unit: product.unit,
+                  quantity: values.quantity,
+                  price: product.price,
+                  total: total,
+                  productCategory: values.productCategory || product.productType || '',
+                  pricePerInch: pricePerInch,
+                  size: size,
+                  cpPerPc: cpPerPc,
+                };
+              } else {
+                updatedItem = {
+                  ...currentInvoice.items[itemIndex],
+                  productId: values.productId,
+                  name: product.name,
+                  unit: product.unit,
+                  quantity: values.quantity,
+                  price: product.price,
+                  total: product.price * values.quantity,
+                  productCategory: values.productCategory || product.productType || '',
+                };
+              }
+              
+              // Create updated items array
+              const updatedItems = [...currentInvoice.items];
+              updatedItems[itemIndex] = updatedItem;
+              
+              // Recalculate totals
+              const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+              let discountAmount;
+              
+              if (discountType === 'percentage') {
+                // Calculate discount as percentage of subtotal
+                discountAmount = (subtotal * currentInvoice.discountRate) / 100;
+              } else {
+                // Use discount as fixed decimal amount
+                discountAmount = currentInvoice.discountRate;
+              }
+              const total = subtotal - discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+              
+              setCurrentInvoice({
+                ...currentInvoice,
+                items: updatedItems,
+                subtotal,
+                discountAmount,
+                total,
+              });
+              
+              setItemVisible(false);
+            }
+          }
+        }
+      })
+      .catch(info => {
+        console.log('Validate Failed:', info);
+      });
   };
 
   const handleDiscountChange = (value: number) => {
     if (currentInvoice) {
-      const discountAmount = (currentInvoice.subtotal * value) / 100;
-      const total = currentInvoice.subtotal - discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+      let discountAmount;
+      
+      if (discountType === 'percentage') {
+        // Calculate discount as percentage of subtotal
+        discountAmount = (currentInvoice.subtotal * value) / 100;
+      } else {
+        // Use discount as fixed decimal amount
+        discountAmount = value;
+      }
+      
+      const total = currentInvoice.subtotal - discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
 
       setCurrentInvoice({
         ...currentInvoice,
@@ -273,7 +559,7 @@ const InvoiceScreen: React.FC = () => {
 
   const handleShippingChargesChange = (value: number) => {
     if (currentInvoice) {
-      const total = currentInvoice.subtotal - currentInvoice.discountAmount + value + currentInvoice.packingCharges;
+      const total = currentInvoice.subtotal - currentInvoice.discountAmount - (currentInvoice.advancePayment || 0) + value + currentInvoice.packingCharges;
 
       setCurrentInvoice({
         ...currentInvoice,
@@ -285,7 +571,7 @@ const InvoiceScreen: React.FC = () => {
 
   const handlePackingChargesChange = (value: number) => {
     if (currentInvoice) {
-      const total = currentInvoice.subtotal - currentInvoice.discountAmount + currentInvoice.shippingCharges + value;
+      const total = currentInvoice.subtotal - currentInvoice.discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + value;
 
       setCurrentInvoice({
         ...currentInvoice,
@@ -299,10 +585,18 @@ const InvoiceScreen: React.FC = () => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
       setSelectedCustomer(customer);
+      
+      // Format address for display
+      const formatAddress = (customer: CustomerData) => {
+        return `${customer.houseNumber}, ${customer.city}, ${customer.district}, ${customer.state} - ${customer.pinCode}${customer.landmark ? ` (Landmark: ${customer.landmark})` : ''}`;
+      };
+      
+      const billingAddress = formatAddress(customer);
+      
       form.setFieldsValue({
         customerName: customer.customerName,
         customerEmail: customer.mobileNumber1,
-        billingAddress: customer.billingAddress,
+        billingAddress: billingAddress,
       });
 
       if (currentInvoice) {
@@ -310,7 +604,7 @@ const InvoiceScreen: React.FC = () => {
           ...currentInvoice,
           customerName: customer.customerName,
           customerEmail: customer.mobileNumber1,
-          billingAddress: customer.billingAddress,
+          billingAddress: billingAddress,
         });
       }
     }
@@ -345,7 +639,7 @@ const InvoiceScreen: React.FC = () => {
       key: 'name',
     },
     {
-      title: 'Product Category',
+      title: 'Product Type',
       dataIndex: 'productCategory',
       key: 'productCategory',
     },
@@ -393,7 +687,7 @@ const InvoiceScreen: React.FC = () => {
       key: 'name',
     },
     {
-      title: 'Product Category',
+      title: 'Product Type',
       dataIndex: 'productCategory',
       key: 'productCategory',
     },
@@ -424,15 +718,63 @@ const InvoiceScreen: React.FC = () => {
     title: 'Action',
     key: 'action',
     render: (text: string, record: InvoiceItem) => (
-      <Popconfirm
-        title="Are you sure to delete this item?"
-        onConfirm={() => handleDeleteItem(record.id)}
-        okText="Yes"
-        cancelText="No"
+      <Space>
+        <Button 
+          type="primary" 
+          icon={<EditOutlined />} 
+          size="small" 
+          onClick={() => handleEditItem(record)}
         >
-            <Button type="primary" danger icon={<DeleteOutlined />} size="small" />
-      </Popconfirm>
+          Edit
+        </Button>
+        <Popconfirm
+          title="Are you sure to delete this item?"
+          onConfirm={() => handleDeleteItem(record.id)}
+          okText="Yes"
+          cancelText="No"
+        >
+          <Button type="primary" danger icon={<DeleteOutlined />} size="small" />
+        </Popconfirm>
+      </Space>
     ),
+  };
+
+  // Function to refresh data from localStorage
+  const refreshData = () => {
+    // Refresh customers
+    const savedCustomers = localStorage.getItem('mockCustomers');
+    if (savedCustomers) {
+      const customersData = JSON.parse(savedCustomers);
+      setCustomers(customersData);
+    }
+    
+    // Refresh products
+    const savedInventoryItems = localStorage.getItem('inventoryItemsWithProductType');
+    if (savedInventoryItems) {
+      const inventoryItems = JSON.parse(savedInventoryItems);
+      // Convert inventory items to products format
+      const productsFromInventory = inventoryItems.map((item: any) => ({
+        id: item.id,
+        sku: item.sku,
+        name: item.name,
+        size: item.size,
+        unit: item.unit,
+        quantity: item.quantity,
+        price: item.price,
+        productType: item.productType,
+        category: item.productType // Use productType as category
+      }));
+      setProducts(productsFromInventory);
+    }
+
+    // Refresh product types
+    const savedProductTypes = localStorage.getItem('inventoryProductTypes');
+    if (savedProductTypes) {
+      const productTypesData = JSON.parse(savedProductTypes);
+      setProductTypes(productTypesData);
+    }
+    
+    message.success('Data refreshed successfully');
   };
 
   // Get columns based on invoice type
@@ -525,9 +867,14 @@ const InvoiceScreen: React.FC = () => {
       <Card>
         <div className="invoice-header">
           <h2>Invoice Management</h2>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddInvoice}>
-            Add Invoice
-          </Button>
+          <Space>
+            <Button icon={<EditOutlined />} onClick={refreshData}>
+              Refresh Data
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAddInvoice}>
+              Add Invoice
+            </Button>
+          </Space>
         </div>
         <Table dataSource={invoices} columns={invoiceColumns} rowKey="id" />
       </Card>
@@ -547,6 +894,11 @@ const InvoiceScreen: React.FC = () => {
           </Button>,
         ]}
       >
+        <div style={{ marginBottom: 16, textAlign: 'right' }}>
+          <Button icon={<EditOutlined />} onClick={refreshData}>
+            Refresh Data
+          </Button>
+        </div>
         <Form form={form} layout="vertical">
           <Row gutter={16}>
             <Col span={12}>
@@ -610,7 +962,15 @@ const InvoiceScreen: React.FC = () => {
                 >
                   {customers.map(customer => (
                     <Option key={customer.id} value={customer.id}>
-                      {customer.customerName} - {customer.mobileNumber1}
+                      <div>
+                        <div><strong>{customer.customerName}</strong></div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          {customer.mobileNumber1} {customer.mobileNumber2 ? `| ${customer.mobileNumber2}` : ''}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          {customer.city}, {customer.state}
+                        </div>
+                      </div>
                     </Option>
                   ))}
                 </Select>
@@ -668,17 +1028,47 @@ const InvoiceScreen: React.FC = () => {
           <Table dataSource={currentInvoice?.items || []} columns={itemColumns} rowKey="id" pagination={false} />
 
           <Row gutter={16} style={{ marginTop: 16 }}>
-            <Col span={8}>
-              <Form.Item label="Discount Rate (%)">
+            <Col span={6}>
+              <Form.Item label="Discount Rate">
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <InputNumber
+                    min={0}
+                    max={discountType === 'percentage' ? 100 : undefined}
+                    value={currentInvoice?.discountRate}
+                    onChange={handleDiscountChange}
+                    style={{ marginRight: '8px' }}
+                  />
+                  <Select
+                    value={discountType}
+                    onChange={(value) => setDiscountType(value as 'percentage' | 'decimal')}
+                    style={{ width: '100px' }}
+                  >
+                    <Option value="percentage">%</Option>
+                    <Option value="decimal">₹</Option>
+                  </Select>
+                </div>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="Advance Payment">
                 <InputNumber
                   min={0}
-                  max={100}
-                  value={currentInvoice?.discountRate}
-                  onChange={handleDiscountChange}
+                  value={currentInvoice?.advancePayment}
+                  onChange={(value) => {
+                    if (currentInvoice) {
+                      const total = currentInvoice.subtotal - currentInvoice.discountAmount - (value || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+                      
+                      setCurrentInvoice({
+                        ...currentInvoice,
+                        advancePayment: value || 0,
+                        total,
+                      });
+                    }
+                  }}
                 />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={6}>
               <Form.Item label="Shipping Charges">
                 <InputNumber
                   min={0}
@@ -687,7 +1077,7 @@ const InvoiceScreen: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={6}>
               <Form.Item label="Packing Charges">
                 <InputNumber
                   min={0}
@@ -709,12 +1099,18 @@ const InvoiceScreen: React.FC = () => {
       </Modal>
 
       <Modal
-        title="Add Invoice Item"
+        title={itemForm.getFieldValue('editingItemId') ? "Edit Invoice Item" : "Add Invoice Item"}
         visible={itemVisible}
-        onOk={handleSaveItem}
+        onOk={itemForm.getFieldValue('editingItemId') ? handleUpdateItem : handleSaveItem}
         onCancel={() => setItemVisible(false)}
       >
         <Form form={itemForm} layout="vertical">
+          <Form.Item
+            name="editingItemId"
+            hidden={true}
+          >
+            <Input type="hidden" />
+          </Form.Item>
           <Form.Item
             name="productId"
             label="Product"
@@ -722,18 +1118,27 @@ const InvoiceScreen: React.FC = () => {
           >
             <Select 
               placeholder="Select a product"
+              disabled={!selectedProductType}
+              showSearch
+              filterOption={(input, option) =>
+                (option?.children as unknown as string)?.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }
               onChange={(value) => {
-                const product = products.find(p => p.id === value);
-                if (product) {
-                  itemForm.setFieldsValue({
-                    productCategory: product.category || ''
-                  });
+                // Find the selected product and populate its details
+                const selectedProduct = products.find(p => p.id === value);
+                if (selectedProduct) {
+                  // Auto-populate price based on product type
+                  if (currentInvoice?.invoiceType === 'manufactured') {
+                    itemForm.setFieldsValue({
+                      pricePerInch: selectedProduct.price
+                    });
+                  }
                 }
               }}
             >
-              {products.map(product => (
-                <Option key={product.id} value={product.id}>
-                  {product.name} - ₹{product.price.toFixed(2)} per {product.unit}
+              {filteredProducts.map(product => (
+                <Option key={product.id} value={product.id} title={product.name}>
+                  {product.name}
                 </Option>
               ))}
             </Select>
@@ -742,8 +1147,25 @@ const InvoiceScreen: React.FC = () => {
           <Form.Item
             name="productCategory"
             label="Product Category"
+            rules={[{ required: true, message: 'Please select a product type!' }]}
           >
-            <Input placeholder="Enter product category" />
+            <Select 
+              placeholder="Select product type"
+              onChange={(value) => {
+                setSelectedProductType(value);
+                // Filter products based on selected product type
+                const filtered = products.filter(product => product.productType === value);
+                setFilteredProducts(filtered);
+                // Clear the product selection when product type changes
+                itemForm.setFieldsValue({
+                  productId: undefined
+                });
+              }}
+            >
+              {productTypes.map(type => (
+                <Option key={type} value={type}>{type}</Option>
+              ))}
+            </Select>
           </Form.Item>
           
           {currentInvoice?.invoiceType === 'manufactured' ? (
@@ -787,7 +1209,7 @@ const InvoiceScreen: React.FC = () => {
             <div>
               <div><strong>Invoice #:</strong> {currentInvoice?.invoiceNumber}</div>
               <div><strong>Date:</strong> {currentInvoice?.date}</div>
-              <div><strong>Type:</strong> 
+              <div style={{display: 'none'}}><strong>Type:</strong> 
                 <span style={{ 
                   textTransform: 'capitalize',
                   color: currentInvoice?.invoiceType === 'manufactured' ? '#1890ff' : '#52c41a' 
@@ -801,9 +1223,10 @@ const InvoiceScreen: React.FC = () => {
           <div className="invoice-details">
             <div className="invoice-details-grid">
               <div className="invoice-customer">
-                <h3>Customer Address:</h3>
+                <h3>Customer Name:</h3>
                 <div><strong>{currentInvoice?.customerName}</strong></div>
                 <div>Phone: {currentInvoice?.customerEmail}</div>
+                <h3>Customer Address:</h3>
                 <div>{currentInvoice?.billingAddress}</div>
               </div>
               <div className="invoice-info">
@@ -818,17 +1241,17 @@ const InvoiceScreen: React.FC = () => {
               {currentInvoice?.invoiceType === 'manufactured' ? (
                 <tr>
                   <th>Product Name</th>
-                  <th>Product Category</th>
+                  <th>Product Type</th>
                   <th>Price Per Inch</th>
                   <th>Size</th>
                   <th>Quantity</th>
-                  <th>CP/pc</th>
+                  <th>Rate /Pc</th>
                   <th>Total</th>
                 </tr>
               ) : (
                 <tr>
                   <th>Product Name</th>
-                  <th>Product Category</th>
+                  <th>Product Type</th>
                   <th>Quantity</th>
                   <th>Price</th>
                   <th>Total</th>
@@ -865,6 +1288,12 @@ const InvoiceScreen: React.FC = () => {
               <span>Subtotal:</span>
               <span>₹{currentInvoice?.subtotal.toFixed(2)}</span>
             </div>
+            {(currentInvoice?.advancePayment || 0) > 0 && (
+              <div className="invoice-totals-row">
+                <span>Advance Payment:</span>
+                <span>-₹{(currentInvoice?.advancePayment || 0).toFixed(2)}</span>
+              </div>
+            )}
             <div className="invoice-totals-row">
               <span>Discount ({currentInvoice?.discountRate}%):</span>
               <span>-₹{currentInvoice?.discountAmount.toFixed(2)}</span>
