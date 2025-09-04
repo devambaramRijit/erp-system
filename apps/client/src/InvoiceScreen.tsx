@@ -58,9 +58,13 @@ const { TextArea } = Input;
 
 interface Product {
   id: string;
+  sku: string;
   name: string;
+  size: string;
   unit: string;
+  quantity: number;
   price: number;
+  productType: string;
   category?: string;
 }
 
@@ -205,10 +209,10 @@ const InvoiceScreen: React.FC = () => {
           id: item.id,
           sku: item.sku,
           name: item.name,
-          size: '',
-          unit: 'pcs',
-          quantity: item.quantity,
-          price: item.price,
+          size: item.size || 0,
+          unit: item.unit || 'pcs',
+          quantity: item.quantity || 0,
+          price: item.price || 0,
           productType: item.productType || 'Traded',
           category: item.category || 'General'
         }));
@@ -223,9 +227,9 @@ const InvoiceScreen: React.FC = () => {
         console.error('Error fetching data:', error);
         // Fallback to mock data if API fails
         const mockProducts: Product[] = [
-          { id: '1', sku: 'SKU001', name: 'Product A', size: '', unit: 'pcs', quantity: 100, price: 10.99, productType: 'Electronics' },
-          { id: '2', sku: 'SKU002', name: 'Product B', size: '', unit: 'kg', quantity: 50, price: 5.99, productType: 'Groceries' },
-          { id: '3', sku: 'SKU003', name: 'Product C', size: '', unit: 'ltr', quantity: 30, price: 7.99, productType: 'Beverages' },
+          { id: '1', sku: 'SKU001', name: 'Product A', size: '0', unit: 'pcs', quantity: 100, price: 10.99, productType: 'Electronics' },
+          { id: '2', sku: 'SKU002', name: 'Product B', size: '0', unit: 'kg', quantity: 50, price: 5.99, productType: 'Groceries' },
+          { id: '3', sku: 'SKU003', name: 'Product C', size: '0', unit: 'ltr', quantity: 30, price: 7.99, productType: 'Beverages' },
         ];
         setProducts(mockProducts);
         
@@ -757,12 +761,12 @@ const InvoiceScreen: React.FC = () => {
         id: item.id,
         sku: item.sku,
         name: item.name,
-        size: item.size,
-        unit: item.unit,
-        quantity: item.quantity,
-        price: item.price,
-        productType: item.productType,
-        category: item.productType // Use productType as category
+        size: item.size || 0,
+        unit: item.unit || 'pcs',
+        quantity: item.quantity || 0,
+        price: item.price || 0,
+        productType: item.productType || 'Traded',
+        category: item.productType || 'General' // Use productType as category
       }));
       setProducts(productsFromInventory);
     }

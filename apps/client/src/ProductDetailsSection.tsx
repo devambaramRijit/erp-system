@@ -10,7 +10,7 @@ interface Product {
   quantity: number;
   price: number;
   productType: string;
-  category: string;
+  category?: string;
 }
 
 interface ProductDetailsSectionProps {
