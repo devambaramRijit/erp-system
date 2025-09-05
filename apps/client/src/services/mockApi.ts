@@ -16,7 +16,7 @@ export interface CustomerData {
 // Load customers from local storage or use default data
 const loadCustomersFromStorage = (): CustomerData[] => {
   try {
-    const stored = localStorage.getItem('mockCustomers');
+    const stored = localStorage.getItem('customers');
     if (stored) {
       return JSON.parse(stored);
     }
@@ -87,7 +87,7 @@ let mockCustomers: CustomerData[] = loadCustomersFromStorage();
 // Save customers to local storage
 const saveCustomersToStorage = () => {
   try {
-    localStorage.setItem('mockCustomers', JSON.stringify(mockCustomers));
+    localStorage.setItem('customers', JSON.stringify(mockCustomers));
   } catch (error) {
     console.error('Error saving customers to storage:', error);
   }

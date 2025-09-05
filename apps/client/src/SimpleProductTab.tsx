@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 interface Product {
@@ -22,6 +22,8 @@ const SimpleProductTab: React.FC = () => {
   const [itemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Product; direction: 'asc' | 'desc' } | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newProduct, setNewProduct] = useState<Omit<Product, 'id'>>({
     sku: '',
     name: '',
@@ -167,23 +169,133 @@ const SimpleProductTab: React.FC = () => {
     }
   };
 
+  // Function to download Excel template
+  const downloadTemplate = () => {
+    // Create a template with headers
+    const headers = [
+      'SKU', 'Name', 'Product Type', 'Product Category', 'HSN Code', 
+      'Quantity', 'Cost Price Per Piece', 'Rate Per Piece', 'Cost Price Per Inch', 'Rate Per Inch'
+    ];
+    
+    // Create a sample row
+    const sampleData = [
+      'SAMPLE-001', 'Sample Product', 'Traded', 'General', '12345678',
+      '10', '100', '150', '10', '15'
+    ];
+    
+    // Create CSV content
+    let csvContent = headers.join(',') + '\n';
+    csvContent += sampleData.join(',') + '\n';
+    
+    // Create a blob and download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'product_import_template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Function to handle Excel file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setError(null);
+
+    try {
+      // Create a FormData object to send the file
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // Send the file to the server
+      const response = await axios.post('/api/products/import-excel', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      // Update the products list with the imported data
+      if (response.data && response.data.products) {
+        setProducts(prevProducts => [...prevProducts, ...response.data.products]);
+        alert(`Successfully imported ${response.data.products.length} products!`);
+      }
+    } catch (err) {
+      setError('Failed to import products from Excel');
+      console.error(err);
+      alert('Error importing products. Please check the file format and try again.');
+    } finally {
+      setImporting(false);
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   return (
     <div>
+      {/* Hidden file input for Excel import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        accept=".xlsx, .xls"
+        onChange={handleFileUpload}
+      />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h2>Product List</h2>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          {showAddForm ? 'Cancel' : 'Add Product'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={downloadTemplate}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#FF9800',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Download Template
+          </button>
+          <button
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.click();
+              }
+            }}
+            disabled={importing}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: importing ? '#90CAF9' : '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: importing ? 'not-allowed' : 'pointer',
+              opacity: importing ? 0.7 : 1
+            }}
+          >
+            {importing ? 'Importing...' : 'Import from Excel'}
+          </button>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            {showAddForm ? 'Cancel' : 'Add Product'}
+          </button>
+        </div>
       </div>
       
       {showAddForm && (

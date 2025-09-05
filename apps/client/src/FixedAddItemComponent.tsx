@@ -211,35 +211,37 @@ const FixedAddItemComponent: React.FC<FixedAddItemProps> = ({ onItemAdded }) => 
             </div>
 
             {newItem.productType === 'Manufactured' && newItem.productCategory === 'Laddu Gopal Base' && (
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>Cost Price per Inch</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={newItem.price}
-                  onChange={handleInputChange}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>Rate per Inch</label>
-                <input
-                  type="number"
-                  name="ratePerInch"
-                  value={newItem.ratePerInch}
-                  onChange={handleInputChange}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                  min="0"
-                  step="0.01"
-                />
-              </div>
+              <>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>Cost Price per Inch</label>
+                  <input
+                    type="number"
+                    name="price"
+                    value={newItem.price}
+                    onChange={handleInputChange}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>Rate per Inch</label>
+                  <input
+                    type="number"
+                    name="ratePerInch"
+                    value={newItem.ratePerInch}
+                    onChange={handleInputChange}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </>
             )}
 
 
 
-            {newItem.productType !== 'Manufactured' || newItem.productCategory !== 'Laddu Gopal Base' ? (
+            {(newItem.productType !== 'Manufactured' || newItem.productCategory !== 'Laddu Gopal Base') && (
               <div>
                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>Cost Price Per Piece</label>
                 <input

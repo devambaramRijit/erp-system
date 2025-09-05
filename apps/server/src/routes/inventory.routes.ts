@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { InventoryItem } from '@shared/schema/inventory';
+import multer from 'multer';
+import csv from 'csv-parser';
+import fs from 'fs';
 
 const router = Router();
+
+// Configure multer for file uploads
+const upload = multer({ dest: 'uploads/' });
 
 // Mock inventory data
 let inventoryItems: InventoryItem[] = [
@@ -145,6 +151,64 @@ router.delete('/:id', (req, res) => {
 
   inventoryItems.splice(itemIndex, 1);
   res.status(204).send();
+});
+
+// Import products from Excel/CSV
+router.post('/import-excel', upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No file uploaded' });
+  }
+
+  const results: any[] = [];
+  const importedProducts: InventoryItem[] = [];
+
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      results.push(data);
+    })
+    .on('end', () => {
+      // Process the CSV data
+      results.forEach((row, index) => {
+        // Skip header row if it exists
+        if (index === 0 && row.sku === 'SKU') return;
+        
+        // Validate required fields
+        if (!row.sku || !row.name || !row['Product Type'] || !row['Product Category']) {
+          console.log(`Skipping row ${index + 1}: Missing required fields`);
+          return;
+        }
+
+        // Create new inventory item
+        const newItem: InventoryItem = {
+          id: Math.random().toString(36).substr(2, 9),
+          sku: row.sku,
+          name: row.name,
+          description: row.description || '',
+          quantity: parseInt(row.quantity) || 0,
+          price: parseFloat(row['Rate Per Piece']) || 0,
+          category: row['Product Category'],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        inventoryItems.push(newItem);
+        importedProducts.push(newItem);
+      });
+
+      // Delete the temporary file
+      fs.unlinkSync(req.file.path);
+
+      // Return the imported products
+      res.status(201).json({
+        message: `Successfully imported ${importedProducts.length} products`,
+        products: importedProducts
+      });
+    })
+    .on('error', (error) => {
+      console.error('Error processing CSV:', error);
+      res.status(500).json({ message: 'Error processing file' });
+    });
 });
 
 export default router;

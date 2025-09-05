@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 
-import InventoryScreen from './InventoryScreen';
+import InventoryScreenWithFixedAdd from './InventoryScreenWithFixedAdd';
 
 import SimpleProductTab from './SimpleProductTab';
 
-const ProductManagementUpdated: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('simple');
-
+const ProductTabs: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('fourth');
   return (
     <div style={{ width: '100%' }}>
       <div style={{
@@ -15,14 +14,13 @@ const ProductManagementUpdated: React.FC = () => {
         <h2 style={{ color: '#2196F3', margin: '0 0 10px 0' }}>Product Management</h2>
       </div>
 
-
-
       <div>
-        {activeTab === 'standard' && <InventoryScreen />}
-        {activeTab === 'simple' && <SimpleProductTab />}
+        {activeTab === 'first' && <InventoryScreenWithFixedAdd />}
+
+        {activeTab === 'fourth' && <SimpleProductTab />}
       </div>
     </div>
   );
 };
 
-export default ProductManagementUpdated;
+export default ProductTabs;

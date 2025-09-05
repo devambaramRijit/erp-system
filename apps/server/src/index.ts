@@ -20,9 +20,17 @@ app.use(session({
   cookie: { secure: false }
 }));
 
+// Create uploads directory if it doesn't exist
+const fs = require('fs');
+const uploadsDir = 'uploads';
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/products', inventoryRoutes);
 
 // Serve static files from the client build (if it exists)
 app.use(express.static(path.join(__dirname, '../../client/dist')));

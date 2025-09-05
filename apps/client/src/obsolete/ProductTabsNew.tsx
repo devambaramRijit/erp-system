@@ -1,5 +1,5 @@
 import React from 'react';
-import SecondProductListTab from './SecondProductListTab';
+
 
 const ProductTabs: React.FC = () => {
   return (
@@ -11,7 +11,7 @@ const ProductTabs: React.FC = () => {
       </div>
 
       <div>
-        <SecondProductListTab />
+
       </div>
     </div>
   );

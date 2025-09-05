@@ -179,7 +179,7 @@ const InvoiceScreen: React.FC = () => {
   // Sample data
   React.useEffect(() => {
     // Load customers from localStorage
-    const savedCustomers = localStorage.getItem('mockCustomers');
+    const savedCustomers = localStorage.getItem('customers');
     if (savedCustomers) {
       const customersData = JSON.parse(savedCustomers);
       setCustomers(customersData);
@@ -429,7 +429,7 @@ useEffect(() => {
                 id: Date.now().toString(),
                 productId: values.productId,
                 name: product.name,
-                unit: product.unit,
+                unit: values.unit || product.unit || 'pcs',
                 quantity: values.quantity,
                 price: rate,
                 total: total,
@@ -445,7 +445,7 @@ useEffect(() => {
                 id: Date.now().toString(),
                 productId: values.productId,
                 name: product.name,
-                unit: product.unit,
+                unit: values.unit || product.unit || 'pcs',
                 quantity: values.quantity,
                 price: rate,
                 total: rate * values.quantity,
@@ -566,7 +566,7 @@ useEffect(() => {
                   ...currentInvoice.items[itemIndex],
                   productId: values.productId,
                   name: product.name,
-                  unit: product.unit,
+                  unit: values.unit || product.unit || 'pcs',
                   quantity: values.quantity,
                   price: rate,
                   total: total,
@@ -582,7 +582,7 @@ useEffect(() => {
                   ...currentInvoice.items[itemIndex],
                   productId: values.productId,
                   name: product.name,
-                  unit: product.unit,
+                  unit: values.unit || product.unit || 'pcs',
                   quantity: values.quantity,
                   price: rate,
                   total: rate * values.quantity,
@@ -752,6 +752,12 @@ useEffect(() => {
       key: 'quantity',
     },
     {
+      title: 'Unit',
+      dataIndex: 'unit',
+      key: 'unit',
+      render: (unit: string) => unit || 'pcs',
+    },
+    {
       title: 'CP/pc',
       dataIndex: 'cpPerPc',
       key: 'cpPerPc',
@@ -787,6 +793,12 @@ useEffect(() => {
       title: 'Quantity',
       dataIndex: 'quantity',
       key: 'quantity',
+    },
+    {
+      title: 'Unit',
+      dataIndex: 'unit',
+      key: 'unit',
+      render: (unit: string) => unit || 'pcs',
     },
     {
       title: 'Price',
@@ -1089,9 +1101,10 @@ useEffect(() => {
                     const customer = customers.find(c => c.id === option.value);
                     if (!customer) return false;
                     
-                    // Search in customer name, mobile numbers, city, and state
+                    // Search in customer ID, name, mobile numbers, city, and state
                     const searchText = input.toLowerCase();
                     return (
+                      (customer.id && customer.id.toLowerCase().includes(searchText)) ||
                       (customer.customerName && customer.customerName.toLowerCase().includes(searchText)) ||
                       (customer.mobileNumber1 && customer.mobileNumber1.toLowerCase().includes(searchText)) ||
                       (customer.mobileNumber2 && customer.mobileNumber2.toLowerCase().includes(searchText)) ||
@@ -1102,15 +1115,7 @@ useEffect(() => {
                 >
                   {customers.map(customer => (
                     <Option key={customer.id} value={customer.id}>
-                      <div>
-                        <div><strong>{customer.customerName}</strong></div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>
-                          {customer.mobileNumber1} {customer.mobileNumber2 ? `| ${customer.mobileNumber2}` : ''}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>
-                          {customer.city}, {customer.state}
-                        </div>
-                      </div>
+                      {customer.customerName}
                     </Option>
                   ))}
                 </Select>
@@ -1357,6 +1362,25 @@ useEffect(() => {
           >
             <InputNumber min={1} style={{ width: '100%' }} />
           </Form.Item>
+
+          <Form.Item
+            name="unit"
+            label="Unit"
+            rules={[{ required: true, message: 'Please select unit!' }]}
+            initialValue="pcs"
+          >
+            <Select placeholder="Select unit">
+              <Option value="pcs">Pieces</Option>
+              <Option value="500gm">500gm</Option>
+              <Option value="1kg">1kg</Option>
+              <Option value="500pieces">500pieces</Option>
+              <Option value="1m">1 Meter</Option>
+              <Option value="kg">Kilogram</Option>
+              <Option value="g">Gram</Option>
+              <Option value="l">Liter</Option>
+              <Option value="ml">Milliliter</Option>
+            </Select>
+          </Form.Item>
         </Form>
       </Modal>
 
@@ -1407,12 +1431,14 @@ useEffect(() => {
                   <th>Size</th>
                   <th>Rate /Pc</th>
                   <th>Quantity</th>
+                  <th>Unit</th>
                   <th>Total</th>
                 </tr>
               ) : (
                 <tr>
                   <th>Product Name</th>
                   <th>Quantity</th>
+                  <th>Unit</th>
                   <th>Price</th>
                   <th>Total</th>
                 </tr>
@@ -1427,12 +1453,14 @@ useEffect(() => {
                     <td>{item.size}</td>
                     <td>₹{((item.pricePerInch || 0) * (item.size || 0)).toFixed(2)}</td>
                     <td>{item.quantity}</td>
+                    <td>{item.unit || 'pcs'}</td>
                     <td>₹{item.total.toFixed(2)}</td>
                   </tr>
                 ) : (
                   <tr key={item.id}>
                     <td>{item.name}</td>
                     <td>{item.quantity}</td>
+                    <td>{item.unit || 'pcs'}</td>
                     <td>₹{item.price.toFixed(2)}</td>
                     <td>₹{item.total.toFixed(2)}</td>
                   </tr>
