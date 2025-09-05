@@ -1117,34 +1117,16 @@ useEffect(() => {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item
-                name="customerName"
-                label="Customer Name"
-                rules={[{ required: true, message: 'Please input customer name!' }]}
-              >
-                <Input />
-              </Form.Item>
+              {/* Customer info fields moved below Add Customer button */}
             </Col>
           </Row>
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item
-                name="customerEmail"
-                label="Customer Email/Phone"
-                rules={[{ required: true, message: 'Please input customer email/phone!' }]}
-              >
-                <Input />
-              </Form.Item>
+              {/* Customer info fields moved below Add Customer button */}
             </Col>
             <Col span={12}>
-              <Form.Item
-                name="billingAddress"
-                label="Billing Address"
-                rules={[{ required: true, message: 'Please input billing address!' }]}
-              >
-                <TextArea rows={2} />
-              </Form.Item>
+              {/* Customer info fields moved below Add Customer button */}
             </Col>
           </Row>
 
@@ -1155,6 +1137,35 @@ useEffect(() => {
               </Button>
             </Col>
           </Row>
+
+          {selectedCustomer && (
+            <Row gutter={16}>
+              <Col span={8}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Customer Name</label>
+                  <div style={{ padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px', backgroundColor: '#f5f5f5' }}>
+                    {selectedCustomer.customerName}
+                  </div>
+                </div>
+              </Col>
+              <Col span={8}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Customer Email/Phone</label>
+                  <div style={{ padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px', backgroundColor: '#f5f5f5' }}>
+                    {selectedCustomer.mobileNumber1 || selectedCustomer.email}
+                  </div>
+                </div>
+              </Col>
+              <Col span={8}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Billing Address</label>
+                  <div style={{ padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px', backgroundColor: '#f5f5f5' }}>
+                    {selectedCustomer.houseNumber ? `${selectedCustomer.houseNumber}, ${selectedCustomer.city}, ${selectedCustomer.district}, ${selectedCustomer.state} - ${selectedCustomer.pinCode}${selectedCustomer.landmark ? ` (Landmark: ${selectedCustomer.landmark})` : ''}` : selectedCustomer.billingAddress || 'No address provided'}
+                  </div>
+                </div>
+              </Col>
+            </Row>
+          )}
 
           <Divider />
 
@@ -1392,17 +1403,15 @@ useEffect(() => {
               {currentInvoice?.invoiceType === 'manufactured' ? (
                 <tr>
                   <th>Product Name</th>
-                  <th>Product Type</th>
                   <th>Price Per Inch</th>
                   <th>Size</th>
-                  <th>Quantity</th>
                   <th>Rate /Pc</th>
+                  <th>Quantity</th>
                   <th>Total</th>
                 </tr>
               ) : (
                 <tr>
                   <th>Product Name</th>
-                  <th>Product Type</th>
                   <th>Quantity</th>
                   <th>Price</th>
                   <th>Total</th>
@@ -1414,17 +1423,15 @@ useEffect(() => {
                 currentInvoice?.invoiceType === 'manufactured' ? (
                   <tr key={item.id}>
                     <td>{item.name}</td>
-                    <td>{item.productCategory}</td>
                     <td>₹{(item.pricePerInch || 0).toFixed(2)}</td>
                     <td>{item.size}</td>
-                    <td>{item.quantity}</td>
                     <td>₹{((item.pricePerInch || 0) * (item.size || 0)).toFixed(2)}</td>
+                    <td>{item.quantity}</td>
                     <td>₹{item.total.toFixed(2)}</td>
                   </tr>
                 ) : (
                   <tr key={item.id}>
                     <td>{item.name}</td>
-                    <td>{item.productCategory}</td>
                     <td>{item.quantity}</td>
                     <td>₹{item.price.toFixed(2)}</td>
                     <td>₹{item.total.toFixed(2)}</td>
@@ -1482,6 +1489,16 @@ useEffect(() => {
             const newCustomer = {
               ...values,
               id: `cust-${Date.now()}`,
+              // Ensure all fields are properly initialized
+              houseNumber: values.houseNumber || '',
+              city: values.city || '',
+              district: values.district || '',
+              state: values.state || '',
+              pinCode: values.pinCode || '',
+              landmark: values.landmark || '',
+              mobileNumber1: values.mobileNumber1 || '',
+              mobileNumber2: values.mobileNumber2 || '',
+              source: values.source || '',
             };
             
             // Add to customers list
@@ -1516,7 +1533,7 @@ useEffect(() => {
             <Col span={12}>
               <Form.Item
                 name="customerName"
-                label="Customer Name"
+                label="Customer Name *"
                 rules={[{ required: true, message: 'Please enter customer name' }]}
               >
                 <Input placeholder="Enter customer name" />
@@ -1524,60 +1541,83 @@ useEffect(() => {
             </Col>
             <Col span={12}>
               <Form.Item
-                name="email"
-                label="Email"
-                rules={[{ type: 'email', message: 'Please enter a valid email' }]}
-              >
-                <Input placeholder="Enter email address" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
                 name="mobileNumber1"
-                label="Primary Mobile"
+                label="Mobile Number 1 *"
                 rules={[{ required: true, message: 'Please enter mobile number' }]}
               >
                 <Input placeholder="Enter primary mobile number" />
               </Form.Item>
             </Col>
+          </Row>
+          <Row gutter={16}>
             <Col span={12}>
               <Form.Item
                 name="mobileNumber2"
-                label="Secondary Mobile"
+                label="Mobile Number 2"
               >
                 <Input placeholder="Enter secondary mobile number" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="source"
+                label="Source"
+              >
+                <Input placeholder="Enter source" />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                name="city"
-                label="City"
-                rules={[{ required: true, message: 'Please enter city' }]}
+                name="houseNumber"
+                label="House/Flat/Street No."
               >
-                <Input placeholder="Enter city" />
+                <Input placeholder="Enter house/flat/street number" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="city"
+                label="City/Town/Village"
+              >
+                <Input placeholder="Enter city/town/village" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="district"
+                label="P.O/District"
+              >
+                <Input placeholder="Enter P.O/District" />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
                 name="state"
                 label="State"
-                rules={[{ required: true, message: 'Please enter state' }]}
               >
                 <Input placeholder="Enter state" />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col span={24}>
+            <Col span={12}>
               <Form.Item
-                name="address"
-                label="Address"
+                name="pinCode"
+                label="PIN Code"
               >
-                <Input.TextArea placeholder="Enter complete address" rows={3} />
+                <Input placeholder="Enter PIN code" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="landmark"
+                label="Landmark"
+              >
+                <Input placeholder="Enter landmark" />
               </Form.Item>
             </Col>
           </Row>
