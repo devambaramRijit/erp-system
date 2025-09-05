@@ -67,11 +67,25 @@ router.get('/:id', (req, res) => {
 
 // Add a new inventory item
 router.post('/', (req, res) => {
+  // Log wrapper to show received and expected data
+  console.log('=== INVENTORY POST REQUEST ===');
+  console.log('Received data:', JSON.stringify(req.body, null, 2));
+  console.log('Expected fields: sku, name, category');
+  console.log('Optional fields: description, quantity, price');
+  
   const { sku, name, description, quantity, price, category } = req.body;
 
   if (!sku || !name || !category) {
+    console.log('Validation failed. Missing required fields.');
+    console.log('Missing:', {
+      sku: !sku ? 'SKU is missing' : 'OK',
+      name: !name ? 'Name is missing' : 'OK',
+      category: !category ? 'Category is missing' : 'OK'
+    });
     return res.status(400).json({ message: 'SKU, name, and category are required' });
   }
+  
+  console.log('Validation passed. All required fields are present.');
 
   const newItem: InventoryItem = {
     id: Math.random().toString(36).substr(2, 9),
@@ -86,6 +100,11 @@ router.post('/', (req, res) => {
   };
 
   inventoryItems.push(newItem);
+  
+  // Log response being sent to frontend
+  console.log('Sending response to frontend:', JSON.stringify(newItem, null, 2));
+  console.log('=== END INVENTORY POST REQUEST ===\n');
+  
   res.status(201).json(newItem);
 });
 

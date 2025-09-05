@@ -25,7 +25,7 @@ const SecondProductListTab: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newCategory, setNewCategory] = useState('');
   const [showAddCategory, setShowAddCategory] = useState(false);
-  const [categories, setCategories] = useState<string[]>(['Electronics', 'Furniture', 'Office Supplies']);
+  const [categories, setCategories] = useState<string[]>([]);
 
   const [newProduct, setNewProduct] = useState<Omit<Product, 'id'>>({
     sku: '',
@@ -39,10 +39,34 @@ const SecondProductListTab: React.FC = () => {
     ratePerInch: undefined
   });
 
-  // Fetch products from API
+  // Load categories from localStorage on component mount
   useEffect(() => {
+    const savedProductTypes = localStorage.getItem('inventoryProductTypes');
+    if (savedProductTypes) {
+      const productTypesData = JSON.parse(savedProductTypes);
+      setCategories(productTypesData);
+    }
+    
     fetchProducts();
   }, []);
+
+  // Load form state from localStorage
+  useEffect(() => {
+    const savedFormState = localStorage.getItem('inventoryFormState');
+    if (savedFormState) {
+      try {
+        const formState = JSON.parse(savedFormState);
+        setNewProduct(formState);
+      } catch (err) {
+        console.error('Error parsing form state from localStorage:', err);
+      }
+    }
+  }, []);
+
+  // Save form state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('inventoryFormState', JSON.stringify(newProduct));
+  }, [newProduct]);
 
   const fetchProducts = async () => {
     try {
@@ -52,7 +76,7 @@ const SecondProductListTab: React.FC = () => {
         id: item.id,
         sku: item.sku,
         name: item.name,
-        productType: item.productType || 'Traded',
+        productType: item.productType || (item.category && (item.category.includes('Manufactured') || item.category.includes('Laddu Gopal')) ? 'Manufactured' : 'Traded'),
         productCategory: item.category || 'General',
         quantity: item.quantity,
         costPricePerPiece: item.price,
@@ -62,6 +86,20 @@ const SecondProductListTab: React.FC = () => {
       }));
       setProducts(transformedProducts);
       setFilteredProducts(transformedProducts);
+      
+      // Extract unique categories from products
+      const uniqueCategories = Array.from(new Set(transformedProducts.map(p => p.productCategory).filter(Boolean))) as string[];
+      
+      // Get existing categories from localStorage
+      const savedProductTypes = localStorage.getItem('inventoryProductTypes');
+      const existingCategories = savedProductTypes ? JSON.parse(savedProductTypes) : [];
+      
+      // Merge existing categories with new unique categories
+      const mergedCategories = Array.from(new Set([...existingCategories, ...uniqueCategories]));
+      
+      // Save merged categories to localStorage
+      localStorage.setItem('inventoryProductTypes', JSON.stringify(mergedCategories));
+      setCategories(mergedCategories);
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -118,12 +156,22 @@ const SecondProductListTab: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setNewProduct({
+    
+    // Check if product type is changing to Manufactured and category to Laddu Gopal Base
+    const updatedProduct = {
       ...newProduct,
       [name]: name === 'quantity' || name === 'costPricePerPiece' || name === 'ratePerPiece' || name === 'costPricePerInch' || name === 'ratePerInch'
         ? value === '' ? undefined : Number(value)
         : value
-    });
+    };
+    
+    // If product type is Manufactured and category is Laddu Gopal Base, set piece-based pricing to null
+    if (updatedProduct.productType === 'Manufactured' && updatedProduct.productCategory === 'Laddu Gopal Base') {
+      updatedProduct.costPricePerPiece = undefined;
+      updatedProduct.ratePerPiece = undefined;
+    }
+    
+    setNewProduct(updatedProduct);
   };
 
   const handleAddProduct = async () => {
@@ -140,14 +188,11 @@ const SecondProductListTab: React.FC = () => {
         name: newProduct.name || 'Unnamed Product',
         quantity: newProduct.quantity || 0,
         price: newProduct.costPricePerPiece || 0,
-        category: newProduct.productCategory || 'General'
+        category: newProduct.productCategory || 'General',
+        productType: newProduct.productType
       };
       
-      // Include inch-based pricing for Manufactured Laddu Gopal Dress
-      if (newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Dress') {
-        dataToSend.costPricePerInch = newProduct.costPricePerInch || 0;
-        dataToSend.ratePerInch = newProduct.ratePerInch || 0;
-      }
+
       
       // Log data being sent to backend
       console.log('Sending data to backend:', JSON.stringify(dataToSend, null, 2));
@@ -163,7 +208,12 @@ const SecondProductListTab: React.FC = () => {
         ...newProduct
       };
 
-      setProducts([...products, addedProduct]);
+      const updatedProducts = [...products, addedProduct];
+      setProducts(updatedProducts);
+      
+      // Save to localStorage
+      localStorage.setItem('inventoryProducts', JSON.stringify(updatedProducts));
+      
       setNewProduct({
         sku: '',
         name: '',
@@ -208,14 +258,13 @@ const SecondProductListTab: React.FC = () => {
         name: newProduct.name || 'Unnamed Product',
         quantity: newProduct.quantity || 0,
         price: newProduct.costPricePerPiece || 0,
-        category: newProduct.productCategory || 'General'
+        category: newProduct.productCategory || 'General',
+        costPricePerInch: newProduct.costPricePerInch || 0,
+        ratePerInch: newProduct.ratePerInch || 0,
+        productType: newProduct.productType
       };
       
-      // Include inch-based pricing for Manufactured Laddu Gopal Dress
-      if (newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Dress') {
-        dataToSend.costPricePerInch = newProduct.costPricePerInch || 0;
-        dataToSend.ratePerInch = newProduct.ratePerInch || 0;
-      }
+
       
       // Log data being sent to backend
       console.log('Updating product with data:', JSON.stringify(dataToSend, null, 2));
@@ -227,6 +276,9 @@ const SecondProductListTab: React.FC = () => {
       );
 
       setProducts(updatedProducts);
+      
+      // Save to localStorage
+      localStorage.setItem('inventoryProducts', JSON.stringify(updatedProducts));
       setNewProduct({
         sku: '',
         name: '',
@@ -250,7 +302,11 @@ const SecondProductListTab: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
         await api.delete(`/inventory/${id}`);
-        setProducts(products.filter(product => product.id !== id));
+        const updatedProducts = products.filter(product => product.id !== id);
+        setProducts(updatedProducts);
+        
+        // Save to localStorage
+        localStorage.setItem('inventoryProducts', JSON.stringify(updatedProducts));
       } catch (err) {
         console.error('Error deleting product:', err);
         alert('Failed to delete product');
@@ -260,10 +316,14 @@ const SecondProductListTab: React.FC = () => {
 
   const handleAddCategory = () => {
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      setCategories([...categories, newCategory.trim()]);
+      const updatedCategories = [...categories, newCategory.trim()];
+      setCategories(updatedCategories);
       setNewProduct({...newProduct, productCategory: newCategory.trim()});
       setNewCategory('');
       setShowAddCategory(false);
+      
+      // Save to localStorage for persistence
+      localStorage.setItem('inventoryProductTypes', JSON.stringify(updatedCategories));
     }
   };
 
@@ -467,10 +527,10 @@ const SecondProductListTab: React.FC = () => {
                 name="costPricePerPiece"
                 value={newProduct.costPricePerPiece}
                 onChange={handleInputChange}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Dress' ? '#f5f5f5' : 'white' }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: (newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Dress' || newProduct.productCategory === 'Laddu Gopal Base')) ? '#f5f5f5' : 'white' }}
                 placeholder="Enter cost price"
                 step="0.01"
-                disabled={newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Dress'}
+                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Dress' || newProduct.productCategory === 'Laddu Gopal Base')}
               />
             </div>
 
@@ -481,15 +541,15 @@ const SecondProductListTab: React.FC = () => {
                 name="ratePerPiece"
                 value={newProduct.ratePerPiece}
                 onChange={handleInputChange}
-                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Dress' ? '#f5f5f5' : 'white' }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: (newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Dress' || newProduct.productCategory === 'Laddu Gopal Base')) ? '#f5f5f5' : 'white' }}
                 placeholder="Enter rate per piece"
                 step="0.01"
-                disabled={newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Dress'}
+                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Dress' || newProduct.productCategory === 'Laddu Gopal Base')}
               />
             </div>
 
-            {/* Show inch-based pricing fields only for Manufactured Laddu Gopal Dress */}
-            {newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Dress' && (
+            {/* Show inch-based pricing fields only for Manufactured Laddu Gopal Dress and Laddu Gopal Base */}
+            {newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Dress' || newProduct.productCategory === 'Laddu Gopal Base') && (
               <>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#333' }}>Cost Price per Inch</label>
@@ -681,13 +741,17 @@ const SecondProductListTab: React.FC = () => {
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productType}</td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productCategory}</td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.quantity}</td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>${product.costPricePerPiece.toFixed(2)}</td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>${product.ratePerPiece.toFixed(2)}</td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                    {product.costPricePerInch !== undefined ? `$${product.costPricePerInch.toFixed(2)}` : '-'}
+                    {product.costPricePerPiece !== undefined ? `$${product.costPricePerPiece.toFixed(2)}` : '-'}
                   </td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                    {product.ratePerInch !== undefined ? `$${product.ratePerInch.toFixed(2)}` : '-'}
+                    {product.ratePerPiece !== undefined ? `$${product.ratePerPiece.toFixed(2)}` : '-'}
+                  </td>
+                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                    {product.costPricePerInch !== undefined && product.costPricePerInch !== null ? `$${product.costPricePerInch.toFixed(2)}` : '-'}
+                  </td>
+                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                    {product.ratePerInch !== undefined && product.ratePerInch !== null ? `$${product.ratePerInch.toFixed(2)}` : '-'}
                   </td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>
                     <button 

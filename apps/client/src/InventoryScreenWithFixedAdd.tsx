@@ -17,7 +17,7 @@ interface InventoryItem {
   updatedAt: string;
 }
 
-const InventoryScreen = () => {
+const InventoryScreenWithFixedAdd = () => {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() => {
     const savedItems = localStorage.getItem('inventoryItemsWithProductType');
     console.log('Loading from localStorage:', savedItems);
@@ -156,10 +156,11 @@ const InventoryScreen = () => {
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #dee2e6' }}>
           <thead>
-            <tr style={{ backgroundColor: '#e9ecef', color: '#495057', fontWeight: 'bold' }}>
+            <tr style={{ backgroundColor: '#f8f9fa' }}>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>SKU</th>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Name</th>
-
+              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Size</th>
+              <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Unit</th>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Quantity</th>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Price</th>
               <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #dee2e6' }}>Product Type</th>
@@ -171,6 +172,8 @@ const InventoryScreen = () => {
               <tr key={item.id}>
                 <td style={{ padding: '12px', borderBottom: '1px solid #dee2e6' }}>{item.sku}</td>
                 <td style={{ padding: '12px', borderBottom: '1px solid #dee2e6' }}>{item.name}</td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #dee2e6' }}>{item.size}</td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #dee2e6' }}>{item.unit}</td>
                 <td style={{ padding: '12px', borderBottom: '1px solid #dee2e6' }}>{item.quantity}</td>
                 <td style={{ padding: '12px', borderBottom: '1px solid #dee2e6' }}>${item.price.toFixed(2)}</td>
                 <td style={{ padding: '12px', borderBottom: '1px solid #dee2e6' }}>{item.productType}</td>
@@ -278,4 +281,4 @@ const InventoryScreen = () => {
   );
 };
 
-export default InventoryScreen;
+export default InventoryScreenWithFixedAdd;

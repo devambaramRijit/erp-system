@@ -3,6 +3,7 @@ import axios from 'axios';
 import { LoginForm } from './components/LoginForm';
 import { Dashboard } from './pages/Dashboard';
 import InventoryScreen from './InventoryScreen';
+import ProductManagementUpdated from './ProductManagementUpdated';
 import InvoiceScreen from './InvoiceScreen';
 import CustomerScreen from './CustomerScreen';
 
@@ -224,7 +225,7 @@ function App() {
       {/* Tab Content */}
       <div>
         {activeTab === 'dashboard' && <Dashboard user={user} onLogout={handleLogout} />}
-        {activeTab === 'inventory' && <InventoryScreen />}
+        {activeTab === 'inventory' && <ProductManagementUpdated />}
         {activeTab === 'invoice' && <InvoiceScreen />}
         {activeTab === 'customers' && <CustomerScreen />}
       </div>

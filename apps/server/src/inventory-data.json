@@ -1,25 +1,48 @@
 [
   {
+    "id": "1",
+    "sku": "ITEM001",
+    "name": "Laptop Computer",
+    "size": "15 inch",
+    "unit": "pieces",
+    "quantity": 15,
+    "price": 999.99,
+    "productType": "Traded",
+    "category": "Electronics",
+    "costPricePerPiece": 999.99,
+    "ratePerPiece": 1199.99,
+    "createdAt": "2025-09-03T04:58:39.296Z",
+    "updatedAt": "2025-09-03T07:06:40.336Z"
+  },
+  {
     "id": "2",
     "sku": "ITEM002",
     "name": "Office Chair",
     "size": "Standard",
-    "unit": "dozen",
+    "unit": "pieces",
     "quantity": 32,
     "price": 249.99,
-    "createdAt": "2025-09-01T04:30:46.190Z",
-    "updatedAt": "2025-09-02T06:59:48.111Z"
+    "productType": "Traded",
+    "category": "Furniture",
+    "costPricePerPiece": 249.99,
+    "ratePerPiece": 299.99,
+    "createdAt": "2025-09-03T06:05:32.324Z",
+    "updatedAt": "2025-09-03T06:25:53.458Z"
   },
   {
     "id": "3",
     "sku": "ITEM003",
     "name": "Wireless Mouse",
-    "size": "Ergonomic",
+    "size": "Compact",
     "unit": "pieces",
     "quantity": 75,
     "price": 29.99,
-    "createdAt": "2025-09-01T04:30:46.190Z",
-    "updatedAt": "2025-09-01T04:30:46.190Z"
+    "productType": "Traded",
+    "category": "Electronics",
+    "costPricePerPiece": 29.99,
+    "ratePerPiece": 35.99,
+    "createdAt": "2025-09-03T07:49:35.016Z",
+    "updatedAt": "2025-09-03T07:49:35.016Z"
   },
   {
     "id": "4",
@@ -29,95 +52,11 @@
     "unit": "pieces",
     "quantity": 24,
     "price": 49.99,
-    "createdAt": "2025-09-01T04:30:46.190Z",
-    "updatedAt": "2025-09-01T13:47:48.698Z"
-  },
-  {
-    "id": "uhmuzye5t",
-    "sku": "s",
-    "name": "s",
-    "size": "4",
-    "unit": "pieces",
-    "quantity": 3,
-    "price": 2,
-    "createdAt": "2025-09-01T04:31:14.731Z",
-    "updatedAt": "2025-09-01T13:42:09.586Z"
-  },
-  {
-    "id": "qbtr1yggh",
-    "sku": "gg1",
-    "name": "d003-green",
-    "size": "4",
-    "unit": "pieces",
-    "quantity": 8,
-    "price": 99,
-    "createdAt": "2025-09-01T05:27:00.336Z",
-    "updatedAt": "2025-09-01T05:27:00.336Z"
-  },
-  {
-    "id": "vp9lx9t4t",
-    "sku": "ITEM001",
-    "name": "Laptop Computer",
-    "size": "15 inch",
-    "unit": "pieces",
-    "quantity": 15,
-    "price": 999.99,
-    "createdAt": "2025-09-01T06:18:15.440Z",
-    "updatedAt": "2025-09-01T13:47:52.907Z"
-  },
-  {
-    "id": "3p9d1fvmi",
-    "sku": "ITEM002",
-    "name": "Office Chair",
-    "size": "Standard",
-    "unit": "pieces",
-    "quantity": 32,
-    "price": 249.99,
-    "createdAt": "2025-09-01T13:15:41.319Z",
-    "updatedAt": "2025-09-01T13:31:19.855Z"
-  },
-  {
-    "id": "bu28q2gs7",
-    "sku": "ITEM002",
-    "name": "LGB-01",
-    "size": "Standard",
-    "unit": "dozen",
-    "quantity": 32,
-    "price": 249.99,
-    "createdAt": "2025-09-01T13:30:59.568Z",
-    "updatedAt": "2025-09-01T13:48:00.487Z"
-  },
-  {
-    "id": "rl9w07lev",
-    "sku": "test",
-    "name": "test",
-    "size": "4",
-    "unit": "box",
-    "quantity": 0,
-    "price": 78,
-    "createdAt": "2025-09-01T13:38:06.481Z",
-    "updatedAt": "2025-09-01T13:38:06.481Z"
-  },
-  {
-    "id": "o602ec4pt",
-    "sku": "23",
-    "name": "rysfv",
-    "size": "2",
-    "unit": "pieces",
-    "quantity": 0,
-    "price": 44,
-    "createdAt": "2025-09-01T13:42:29.611Z",
-    "updatedAt": "2025-09-01T13:42:29.611Z"
-  },
-  {
-    "id": "e0ituck7z",
-    "sku": "22",
-    "name": "er",
-    "size": "5",
-    "unit": "dozen",
-    "quantity": 0,
-    "price": 24,
-    "createdAt": "2025-09-01T13:46:08.110Z",
-    "updatedAt": "2025-09-01T13:46:08.110Z"
+    "productType": "Traded",
+    "category": "Office Supplies",
+    "costPricePerPiece": 49.99,
+    "ratePerPiece": 59.99,
+    "createdAt": "2025-09-03T07:49:35.016Z",
+    "updatedAt": "2025-09-03T07:49:35.016Z"
   }
 ]

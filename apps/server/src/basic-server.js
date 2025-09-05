@@ -4,6 +4,8 @@ const querystring = require('querystring');
 const fs = require('fs');
 const path = require('path');
 
+console.log('=== USING BASIC-SERVER.JS ===');
+
 // File path for inventory data storage
 const inventoryFilePath = path.join(__dirname, 'inventory-data.json');
 
@@ -218,29 +220,55 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      const { sku, name, size, unit, quantity, price } = body;
+      // Log data received from frontend
+      console.log('Received data from frontend:', JSON.stringify(body, null, 2));
+      
+      const { sku, name, size, unit, quantity, price, category, productType } = body;
 
-      if (!sku || !name || !size || !unit || quantity === undefined || quantity === null || price === undefined || price === null) {
+      // Log wrapper to show received and expected data
+      console.log('=== INVENTORY POST REQUEST ===');
+      console.log('Received data:', JSON.stringify(body, null, 2));
+      console.log('Expected fields: sku, name, category');
+      console.log('Optional fields: description, quantity, price');
+
+      if (!sku || !name || !category) {
+        console.log('Validation failed. Missing required fields.');
+        console.log('Missing:', {
+          sku: !sku ? 'SKU is missing' : 'OK',
+          name: !name ? 'Name is missing' : 'OK',
+          category: !category ? 'Category is missing' : 'OK'
+        });
         res.statusCode = 400;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ message: 'All fields are required' }));
+        res.end(JSON.stringify({ message: 'SKU, name, and category are required' }));
         return;
       }
+
+      console.log('Validation passed. All required fields are present.');
 
       const newItem = {
         id: Math.random().toString(36).substr(2, 9),
         sku,
         name,
-        size,
-        unit,
+        size: size || '',
+        unit: unit || 'pieces',
         quantity: Number(quantity) || 0,
         price: Number(price) || 0,
+        category: category || 'General',
+        productType: productType || 'Traded',
+        costPricePerInch: Number(costPricePerInch) || 0,
+        ratePerInch: Number(ratePerInch) || 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
       inventoryItems.push(newItem);
       saveInventoryToFile(); // Save to file after adding new item
+      
+      // Log response being sent to frontend
+      console.log('Sending response to frontend:', JSON.stringify(newItem, null, 2));
+      console.log('=== END INVENTORY POST REQUEST ===\n');
+      
       res.statusCode = 201;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(newItem));
@@ -263,7 +291,7 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      const { sku, name, size, unit, quantity, price } = body;
+      const { sku, name, size, unit, quantity, price, productType } = body;
 
       if (!sku || !name || !size || !unit || quantity === undefined || quantity === null || price === undefined || price === null) {
         res.statusCode = 400;
@@ -280,6 +308,9 @@ const server = http.createServer((req, res) => {
         unit,
         quantity: Number(quantity) || inventoryItems[itemIndex].quantity,
         price: Number(price) || inventoryItems[itemIndex].price,
+        productType: productType || inventoryItems[itemIndex].productType || 'Traded',
+        costPricePerInch: Number(costPricePerInch) || inventoryItems[itemIndex].costPricePerInch || 0,
+        ratePerInch: Number(ratePerInch) || inventoryItems[itemIndex].ratePerInch || 0,
         updatedAt: new Date().toISOString()
       };
       saveInventoryToFile(); // Save to file after updating item

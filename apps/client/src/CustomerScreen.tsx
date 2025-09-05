@@ -40,10 +40,10 @@ const CustomerScreen = () => {
     } else {
       const term = searchTerm.toLowerCase();
       const filtered = customers.filter(customer => 
-        customer.customerName.toLowerCase().includes(term) ||
-        customer.mobileNumber1.includes(term) ||
-        customer.city.toLowerCase().includes(term) ||
-        customer.state.toLowerCase().includes(term)
+        customer.customerName && customer.customerName.toLowerCase().includes(term) ||
+        customer.mobileNumber1 && customer.mobileNumber1.includes(term) ||
+        customer.city && customer.city.toLowerCase().includes(term) ||
+        customer.state && customer.state.toLowerCase().includes(term)
       );
       setFilteredCustomers(filtered);
     }
@@ -52,9 +52,19 @@ const CustomerScreen = () => {
   const fetchCustomers = async () => {
     try {
       setIsLoading(true);
-      const customers = await mockCustomerApi.getCustomers();
-      setCustomers(customers);
-      setFilteredCustomers(customers);
+      
+      // First try to get customers from localStorage
+      const savedCustomers = localStorage.getItem('customers');
+      if (savedCustomers) {
+        const parsedCustomers = JSON.parse(savedCustomers);
+        setCustomers(parsedCustomers);
+        setFilteredCustomers(parsedCustomers);
+      } else {
+        // Fallback to API if no customers in localStorage
+        const customers = await mockCustomerApi.getCustomers();
+        setCustomers(customers);
+        setFilteredCustomers(customers);
+      }
     } catch (err) {
       console.error('Error fetching customers:', err);
       alert(`Error fetching customers: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -76,17 +86,30 @@ const CustomerScreen = () => {
     try {
       console.log('Saving customer data:', formData);
       
+      let updatedCustomers;
+      
       if (editingCustomer) {
         // Update existing customer
         console.log(`Updating customer with ID: ${editingCustomer.id}`);
         await mockCustomerApi.updateCustomer(editingCustomer.id, formData);
         console.log('Update successful');
+        
+        // Update localStorage
+        updatedCustomers = customers.map(customer => 
+          customer.id === editingCustomer.id ? { ...formData, id: editingCustomer.id } : customer
+        );
       } else {
         // Add new customer
         console.log('Creating new customer');
-        await mockCustomerApi.createCustomer(formData);
+        const newCustomer = await mockCustomerApi.createCustomer(formData);
         console.log('Create successful');
+        
+        // Update localStorage
+        updatedCustomers = [...customers, newCustomer];
       }
+      
+      // Save to localStorage
+      localStorage.setItem('customers', JSON.stringify(updatedCustomers));
 
       // Reset form and refresh customer list
       setFormData({
@@ -136,7 +159,19 @@ const CustomerScreen = () => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
       try {
         await mockCustomerApi.deleteCustomer(id);
-        fetchCustomers();
+        
+        // Also remove from localStorage
+        const updatedCustomers = customers.filter(customer => customer.id !== id);
+        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+        
+        // Update state
+        setCustomers(updatedCustomers);
+        setFilteredCustomers(updatedCustomers.filter(customer => 
+          customer.customerName && customer.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          customer.mobileNumber1 && customer.mobileNumber1.includes(searchTerm) ||
+          customer.city && customer.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          customer.state && customer.state.toLowerCase().includes(searchTerm.toLowerCase())
+        ));
       } catch (err) {
         console.error('Error deleting customer:', err);
         alert(`Error deleting customer: ${err instanceof Error ? err.message : 'Unknown error'}`);
