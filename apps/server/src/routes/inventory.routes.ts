@@ -153,12 +153,17 @@ router.delete('/:id', (req, res) => {
   res.status(204).send();
 });
 
-// Import products from Excel/CSV
-router.post('/import-excel', upload.single('file'), (req, res) => {
+// Import products from CSV
+router.post('/import-csv', upload.single('file'), (req, res) => {
+  console.log('CSV import request received');
+  
   if (!req.file) {
+    console.log('No file uploaded');
     return res.status(400).json({ message: 'No file uploaded' });
   }
 
+  console.log(`File received: ${req.file.originalname}, size: ${req.file.size}, path: ${req.file.path}`);
+  
   const results: any[] = [];
   const importedProducts: InventoryItem[] = [];
 
@@ -168,25 +173,37 @@ router.post('/import-excel', upload.single('file'), (req, res) => {
       results.push(data);
     })
     .on('end', () => {
+      console.log(`CSV parsing complete. Found ${results.length} rows.`);
+      
       // Process the CSV data
       results.forEach((row, index) => {
+        console.log(`Processing row ${index + 1}:`, JSON.stringify(row, null, 2));
         // Skip header row if it exists
-        if (index === 0 && row.sku === 'SKU') return;
+        if (index === 0 && row.SKU === 'SKU') return;
         
         // Validate required fields
-        if (!row.sku || !row.name || !row['Product Type'] || !row['Product Category']) {
+        if (!row.SKU || !row.Name || !row['Product Type'] || !row['Product Category']) {
           console.log(`Skipping row ${index + 1}: Missing required fields`);
+          console.log(`Missing fields: SKU=${!!row.SKU}, Name=${!!row.Name}, Product Type=${!!row['Product Type']}, Product Category=${!!row['Product Category']}`);
           return;
+        }
+
+        // Determine price based on product type
+        let price = 0;
+        if (row['Product Type'] === 'Traded' && row['Cost Price Per Piece']) {
+          price = parseFloat(row['Cost Price Per Piece']) || 0;
+        } else if (row['Product Type'] === 'Manufactured' && row['Cost Price Per Inch']) {
+          price = parseFloat(row['Cost Price Per Inch']) || 0;
         }
 
         // Create new inventory item
         const newItem: InventoryItem = {
           id: Math.random().toString(36).substr(2, 9),
-          sku: row.sku,
-          name: row.name,
-          description: row.description || '',
-          quantity: parseInt(row.quantity) || 0,
-          price: parseFloat(row['Rate Per Piece']) || 0,
+          sku: row.SKU,
+          name: row.Name,
+          description: '', // No description field in CSV
+          quantity: parseInt(row.Quantity) || 0,
+          price: price,
           category: row['Product Category'],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -198,8 +215,10 @@ router.post('/import-excel', upload.single('file'), (req, res) => {
 
       // Delete the temporary file
       fs.unlinkSync(req.file.path);
+      console.log(`Temporary file deleted: ${req.file.path}`);
 
       // Return the imported products
+      console.log(`Import successful. Added ${importedProducts.length} products.`);
       res.status(201).json({
         message: `Successfully imported ${importedProducts.length} products`,
         products: importedProducts
@@ -207,7 +226,8 @@ router.post('/import-excel', upload.single('file'), (req, res) => {
     })
     .on('error', (error) => {
       console.error('Error processing CSV:', error);
-      res.status(500).json({ message: 'Error processing file' });
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      res.status(500).json({ message: `Error processing file: ${error.message}` });
     });
 });
 

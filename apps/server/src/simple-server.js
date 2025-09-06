@@ -2,6 +2,18 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const session = require('express-session');
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = 'uploads';
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+// Configure multer for file uploads
+const upload = multer({ dest: 'uploads/' });
 
 console.log('=== USING SIMPLE-SERVER.JS ===');
 
@@ -205,6 +217,87 @@ app.delete('/api/inventory/:id', (req, res) => {
 
   inventoryItems.splice(itemIndex, 1);
   res.status(204).send();
+});
+
+// Import products from CSV
+app.post('/api/products/import-csv', upload.single('file'), (req, res) => {
+  console.log('CSV import request received');
+  
+  if (!req.file) {
+    console.log('No file uploaded');
+    return res.status(400).json({ message: 'No file uploaded' });
+  }
+
+  console.log(`File received: ${req.file.originalname}, size: ${req.file.size}, path: ${req.file.path}`);
+  
+  const results = [];
+  const importedProducts = [];
+
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      results.push(data);
+    })
+    .on('end', () => {
+      console.log(`CSV parsing complete. Found ${results.length} rows.`);
+      
+      // Process the CSV data
+      results.forEach((row, index) => {
+        console.log(`Processing row ${index + 1}:`, JSON.stringify(row, null, 2));
+        
+        // Skip header row if it exists
+        if (index === 0 && row.SKU === 'SKU') return;
+        
+        // Validate required fields
+        if (!row.SKU || !row.Name || !row['Product Type'] || !row['Product Category']) {
+          console.log(`Skipping row ${index + 1}: Missing required fields`);
+          console.log(`Missing fields: SKU=${!!row.SKU}, Name=${!!row.Name}, Product Type=${!!row['Product Type']}, Product Category=${!!row['Product Category']}`);
+          return;
+        }
+
+        // Determine price based on product type
+        let price = 0;
+        if (row['Product Type'] === 'Traded' && row['Cost Price Per Piece']) {
+          price = parseFloat(row['Cost Price Per Piece']) || 0;
+        } else if (row['Product Type'] === 'Manufactured' && row['Product Category'] === 'Laddu Gopal Mukut' && row['Cost Price Per Piece']) {
+          price = parseFloat(row['Cost Price Per Piece']) || 0;
+        } else if (row['Product Type'] === 'Manufactured' && (row['Product Category'] === 'Laddu Gopal Base' || row['Product Category'] === 'Laddu Gopal Dress') && row['Cost Price Per Inch']) {
+          price = parseFloat(row['Cost Price Per Inch']) || 0;
+        }
+
+        // Create new inventory item
+        const newItem = {
+          id: Math.random().toString(36).substr(2, 9),
+          sku: row.SKU,
+          name: row.Name,
+          description: '', // No description field in CSV
+          quantity: parseInt(row.Quantity) || 0,
+          price: price,
+          category: row['Product Category'],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        inventoryItems.push(newItem);
+        importedProducts.push(newItem);
+      });
+
+      // Delete the temporary file
+      fs.unlinkSync(req.file.path);
+      console.log(`Temporary file deleted: ${req.file.path}`);
+
+      // Return the imported products
+      console.log(`Import successful. Added ${importedProducts.length} products.`);
+      res.status(201).json({
+        message: `Successfully imported ${importedProducts.length} products`,
+        products: importedProducts
+      });
+    })
+    .on('error', (error) => {
+      console.error('Error processing CSV:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      res.status(500).json({ message: `Error processing file: ${error.message}` });
+    });
 });
 
 // Serve static files from the client build (if it exists)

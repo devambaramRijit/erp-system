@@ -126,6 +126,7 @@ const InvoiceScreen: React.FC = () => {
   const [currentInvoice, setCurrentInvoice] = useState<Invoice | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [disableRateField, setDisableRateField] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   // Load current invoice from localStorage on component mount
@@ -670,6 +671,16 @@ useEffect(() => {
         packingCharges: value,
         total,
       });
+    }
+  };
+
+  const handleProductCategoryChange = (value: string) => {
+    // Disable rate field if product category is Laddu Gopal Base
+    setDisableRateField(value === 'Laddu Gopal Base');
+    
+    // If rate field is disabled, clear its value
+    if (value === 'Laddu Gopal Base') {
+      itemForm.setFieldsValue({ rate: 0 });
     }
   };
 
@@ -1284,6 +1295,14 @@ useEffect(() => {
                 // Find the selected product and populate its details
                 const selectedProduct = products.find(p => p.id === value);
                 if (selectedProduct) {
+                  // Set the product category
+                  itemForm.setFieldsValue({
+                    productCategory: selectedProduct.category
+                  });
+                  
+                  // Handle product category change
+                  handleProductCategoryChange(selectedProduct.category);
+                  
                   // Auto-populate price based on product
                   if (currentInvoice?.invoiceType === 'manufactured') {
                     // Use inch-based pricing if available (for Laddu Gopal Dress and Base)
@@ -1472,7 +1491,7 @@ useEffect(() => {
           <div className="invoice-totals">
             <div className="invoice-totals-row">
               <span>Subtotal:</span>
-              <span>₹{currentInvoice?.subtotal.toFixed(2)}</span>
+              <span>₹{(currentInvoice?.subtotal || 0).toFixed(2)}</span>
             </div>
             {(currentInvoice?.advancePayment || 0) > 0 && (
               <div className="invoice-totals-row">
@@ -1482,19 +1501,19 @@ useEffect(() => {
             )}
             <div className="invoice-totals-row">
               <span>Discount ({currentInvoice?.discountRate}%):</span>
-              <span>-₹{currentInvoice?.discountAmount.toFixed(2)}</span>
+              <span>-₹{(currentInvoice?.discountAmount || 0).toFixed(2)}</span>
             </div>
             <div className="invoice-totals-row">
               <span>Shipping Charges:</span>
-              <span>₹{currentInvoice?.shippingCharges.toFixed(2)}</span>
+              <span>₹{(currentInvoice?.shippingCharges || 0).toFixed(2)}</span>
             </div>
             <div className="invoice-totals-row">
               <span>Packing Charges:</span>
-              <span>₹{currentInvoice?.packingCharges.toFixed(2)}</span>
+              <span>₹{(currentInvoice?.packingCharges || 0).toFixed(2)}</span>
             </div>
             <div className="invoice-totals-row total">
               <span>Total:</span>
-              <span>₹{currentInvoice?.total.toFixed(2)}</span>
+              <span>₹{(currentInvoice?.total || 0).toFixed(2)}</span>
             </div>
           </div>
 

@@ -146,6 +146,12 @@ const SimpleProductTab: React.FC = () => {
         id: 'prod-' + Date.now()
       };
       
+      // Special handling for Laddu Gopal Mukut - clear inch-based pricing
+      if (newProductWithId.productCategory === 'Laddu Gopal Mukut') {
+        newProductWithId.costPricePerInch = undefined;
+        newProductWithId.ratePerInch = undefined;
+      }
+      
       // Add the new product to the list
       const updatedProducts = [...products, newProductWithId];
       setProducts(updatedProducts);
@@ -169,23 +175,38 @@ const SimpleProductTab: React.FC = () => {
     }
   };
 
-  // Function to download Excel template
+  // Function to download CSV template
   const downloadTemplate = () => {
-    // Create a template with headers
+    // Create a template with headers matching the Product interface
     const headers = [
-      'SKU', 'Name', 'Product Type', 'Product Category', 'HSN Code', 
+      'SKU', 'Name', 'Product Type', 'Product Category', 
       'Quantity', 'Cost Price Per Piece', 'Rate Per Piece', 'Cost Price Per Inch', 'Rate Per Inch'
     ];
     
-    // Create a sample row
+    // Create sample rows for different product types
     const sampleData = [
-      'SAMPLE-001', 'Sample Product', 'Traded', 'General', '12345678',
-      '10', '100', '150', '10', '15'
+      // Traded product sample
+      [
+        'TRADED-001', 'Sample Traded Product', 'Traded', 'General',
+        '10', '100', '150', '', ''
+      ],
+      // Manufactured product sample (Base)
+      [
+        'MANUF-001', 'Sample Laddu Gopal Base', 'Manufactured', 'Laddu Gopal Base',
+        '5', '', '', '10', '15'
+      ],
+      // Manufactured product sample (Mukut)
+      [
+        'MANUF-002', 'Sample Laddu Gopal Mukut', 'Manufactured', 'Laddu Gopal Mukut',
+        '3', '200', '300', '', ''
+      ]
     ];
     
     // Create CSV content
     let csvContent = headers.join(',') + '\n';
-    csvContent += sampleData.join(',') + '\n';
+    sampleData.forEach(row => {
+      csvContent += row.join(',') + '\n';
+    });
     
     // Create a blob and download link
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -199,11 +220,12 @@ const SimpleProductTab: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Function to handle Excel file upload
+  // Function to handle CSV file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log(`File selected: ${file.name}, size: ${file.size}, type: ${file.type}`);
     setImporting(true);
     setError(null);
 
@@ -213,21 +235,45 @@ const SimpleProductTab: React.FC = () => {
       formData.append('file', file);
 
       // Send the file to the server
-      const response = await axios.post('/api/products/import-excel', formData, {
+      console.log('Sending file to server...');
+      const response = await axios.post('/api/products/import-csv', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
+      console.log('Server response:', response.data);
 
       // Update the products list with the imported data
       if (response.data && response.data.products) {
-        setProducts(prevProducts => [...prevProducts, ...response.data.products]);
-        alert(`Successfully imported ${response.data.products.length} products!`);
+        // Transform the imported data to match the Product interface
+        const transformedProducts = response.data.products.map((item: any) => {
+          // Determine product type based on category
+          const isManufactured = item.category === 'Laddu Gopal Base' || item.category === 'Laddu Gopal Dress' || item.category === 'Laddu Gopal Mukut';
+          
+          return {
+            id: item.id,
+            sku: item.sku,
+            name: item.name,
+            productType: isManufactured ? 'Manufactured' : 'Traded',
+            productCategory: item.category,
+            quantity: item.quantity,
+            costPricePerPiece: isManufactured && item.category === 'Laddu Gopal Mukut' ? item.price : undefined,
+            ratePerPiece: isManufactured && item.category === 'Laddu Gopal Mukut' ? item.price * 1.5 : undefined, // Assuming 50% profit margin
+            costPricePerInch: isManufactured && (item.category === 'Laddu Gopal Base' || item.category === 'Laddu Gopal Dress') ? item.price / 10 : undefined,
+            ratePerInch: isManufactured && (item.category === 'Laddu Gopal Base' || item.category === 'Laddu Gopal Dress') ? (item.price / 10) * 1.5 : undefined
+          };
+        });
+        
+        setProducts(prevProducts => [...prevProducts, ...transformedProducts]);
+        alert(`Successfully imported ${transformedProducts.length} products!`);
       }
     } catch (err) {
-      setError('Failed to import products from Excel');
-      console.error(err);
-      alert('Error importing products. Please check the file format and try again.');
+      setError('Failed to import products from CSV');
+      console.error('Error importing CSV:', err);
+      if (axios.isAxiosError(err) && err.response) {
+        console.error('Server response:', err.response.data);
+      }
+      alert(`Error importing products: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setImporting(false);
       // Reset the file input
@@ -244,7 +290,7 @@ const SimpleProductTab: React.FC = () => {
         type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
-        accept=".xlsx, .xls"
+        accept=".csv"
         onChange={handleFileUpload}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -261,7 +307,7 @@ const SimpleProductTab: React.FC = () => {
               cursor: 'pointer'
             }}
           >
-            Download Template
+            Download CSV Template
           </button>
           <button
             onClick={() => {
@@ -280,7 +326,7 @@ const SimpleProductTab: React.FC = () => {
               opacity: importing ? 0.7 : 1
             }}
           >
-            {importing ? 'Importing...' : 'Import from Excel'}
+            {importing ? 'Importing...' : 'Import from CSV'}
           </button>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
@@ -374,7 +420,7 @@ const SimpleProductTab: React.FC = () => {
                 style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                 min="0"
                 step="0.01"
-                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Base' || newProduct.productCategory === 'Laddu Gopal Dress')}
+                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Base' || newProduct.productCategory === 'Laddu Gopal Dress') && newProduct.productCategory !== 'Laddu Gopal Mukut'}
               />
             </div>
             <div>
@@ -387,7 +433,7 @@ const SimpleProductTab: React.FC = () => {
                 style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                 min="0"
                 step="0.01"
-                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Base' || newProduct.productCategory === 'Laddu Gopal Dress')}
+                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Base' || newProduct.productCategory === 'Laddu Gopal Dress') && newProduct.productCategory !== 'Laddu Gopal Mukut'}
               />
             </div>
             <div>
@@ -400,7 +446,7 @@ const SimpleProductTab: React.FC = () => {
                 style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                 min="0"
                 step="0.01"
-                disabled={newProduct.productType !== 'Manufactured' || (newProduct.productCategory !== 'Laddu Gopal Base' && newProduct.productCategory !== 'Laddu Gopal Dress')}
+                disabled={newProduct.productType !== 'Manufactured' || (newProduct.productCategory !== 'Laddu Gopal Base' && newProduct.productCategory !== 'Laddu Gopal Dress' && newProduct.productCategory !== 'Laddu Gopal Mukut')}
               />
             </div>
             <div>
@@ -413,7 +459,7 @@ const SimpleProductTab: React.FC = () => {
                 style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                 min="0"
                 step="0.01"
-                disabled={newProduct.productType !== 'Manufactured' || (newProduct.productCategory !== 'Laddu Gopal Base' && newProduct.productCategory !== 'Laddu Gopal Dress')}
+                disabled={newProduct.productType !== 'Manufactured' || (newProduct.productCategory !== 'Laddu Gopal Base' && newProduct.productCategory !== 'Laddu Gopal Dress' && newProduct.productCategory !== 'Laddu Gopal Mukut')}
               />
             </div>
           </div>
