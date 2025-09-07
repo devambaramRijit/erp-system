@@ -3,6 +3,15 @@ import { Button } from './components/ui/button';
 import { Plus, Search, Edit, Trash2, User } from 'lucide-react';
 import { mockCustomerApi, CustomerData } from './services/mockApi';
 
+// Helper function to standardize state names
+const standardizeState = (state: string) => {
+  if (!state) return '';
+  return state
+    .split(' ')                          // split in case of multi-word states
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');                          // e.g., "andhra pradesh" -> "Andhra Pradesh"
+};
+
 const CustomerScreen = () => {
   const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<CustomerData[]>([]);
@@ -60,10 +69,9 @@ const CustomerScreen = () => {
         setCustomers(parsedCustomers);
         setFilteredCustomers(parsedCustomers);
       } else {
-        // Fallback to API if no customers in localStorage
-        const customers = await mockCustomerApi.getCustomers();
-        setCustomers(customers);
-        setFilteredCustomers(customers);
+        // No fallback to mock customers
+        setCustomers([]);
+        setFilteredCustomers([]);
       }
     } catch (err) {
       console.error('Error fetching customers:', err);
@@ -86,22 +94,28 @@ const CustomerScreen = () => {
     try {
       console.log('Saving customer data:', formData);
       
+      // Standardize state before saving
+      const normalizedData = {
+        ...formData,
+        state: standardizeState(formData.state)
+      };
+      
       let updatedCustomers;
       
       if (editingCustomer) {
         // Update existing customer
         console.log(`Updating customer with ID: ${editingCustomer.id}`);
-        await mockCustomerApi.updateCustomer(editingCustomer.id, formData);
+        await mockCustomerApi.updateCustomer(editingCustomer.id, normalizedData);
         console.log('Update successful');
         
         // Update localStorage
         updatedCustomers = customers.map(customer => 
-          customer.id === editingCustomer.id ? { ...formData, id: editingCustomer.id } : customer
+          customer.id === editingCustomer.id ? { ...normalizedData, id: editingCustomer.id } : customer
         );
       } else {
         // Add new customer
         console.log('Creating new customer');
-        const newCustomer = await mockCustomerApi.createCustomer(formData);
+        const newCustomer = await mockCustomerApi.createCustomer(normalizedData);
         console.log('Create successful');
         
         // Update localStorage
@@ -110,6 +124,9 @@ const CustomerScreen = () => {
       
       // Save to localStorage
       localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new CustomEvent('customersUpdated'));
 
       // Reset form and refresh customer list
       setFormData({
@@ -145,7 +162,7 @@ const CustomerScreen = () => {
       houseNumber: customer.houseNumber,
       city: customer.city,
       district: customer.district,
-      state: customer.state,
+      state: standardizeState(customer.state),
       pinCode: customer.pinCode,
       landmark: customer.landmark,
       mobileNumber1: customer.mobileNumber1,
@@ -163,6 +180,9 @@ const CustomerScreen = () => {
         // Also remove from localStorage
         const updatedCustomers = customers.filter(customer => customer.id !== id);
         localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+
+        // Dispatch custom event to notify other components
+        window.dispatchEvent(new CustomEvent('customersUpdated'));
         
         // Update state
         setCustomers(updatedCustomers);
@@ -358,13 +378,50 @@ const CustomerScreen = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   State
                 </label>
-                <input
-                  type="text"
+                <select
                   name="state"
                   value={formData.state}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                >
+                  <option value="">Select a state</option>
+                  <option value="Andhra Pradesh">Andhra Pradesh</option>
+                  <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                  <option value="Assam">Assam</option>
+                  <option value="Bihar">Bihar</option>
+                  <option value="Chhattisgarh">Chhattisgarh</option>
+                  <option value="Goa">Goa</option>
+                  <option value="Gujarat">Gujarat</option>
+                  <option value="Haryana">Haryana</option>
+                  <option value="Himachal Pradesh">Himachal Pradesh</option>
+                  <option value="Jharkhand">Jharkhand</option>
+                  <option value="Karnataka">Karnataka</option>
+                  <option value="Kerala">Kerala</option>
+                  <option value="Madhya Pradesh">Madhya Pradesh</option>
+                  <option value="Maharashtra">Maharashtra</option>
+                  <option value="Manipur">Manipur</option>
+                  <option value="Meghalaya">Meghalaya</option>
+                  <option value="Mizoram">Mizoram</option>
+                  <option value="Nagaland">Nagaland</option>
+                  <option value="Odisha">Odisha</option>
+                  <option value="Punjab">Punjab</option>
+                  <option value="Rajasthan">Rajasthan</option>
+                  <option value="Sikkim">Sikkim</option>
+                  <option value="Tamil Nadu">Tamil Nadu</option>
+                  <option value="Telangana">Telangana</option>
+                  <option value="Tripura">Tripura</option>
+                  <option value="Uttar Pradesh">Uttar Pradesh</option>
+                  <option value="Uttarakhand">Uttarakhand</option>
+                  <option value="West Bengal">West Bengal</option>
+                  <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
+                  <option value="Chandigarh">Chandigarh</option>
+                  <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
+                  <option value="Delhi">Delhi</option>
+                  <option value="Jammu and Kashmir">Jammu and Kashmir</option>
+                  <option value="Ladakh">Ladakh</option>
+                  <option value="Lakshadweep">Lakshadweep</option>
+                  <option value="Puducherry">Puducherry</option>
+                </select>
               </div>
 
               <div>
