@@ -13,6 +13,54 @@
 .invoice-container {
   padding: 20px;
   font-family: Arial, sans-serif;
+  background-color: #ffffff;
+  color: #333333;
+  margin: 30px 0 30px 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.invoice-container h1,
+.invoice-container h2,
+.invoice-container h3,
+.invoice-container h4,
+.invoice-container h5,
+.invoice-container h6 {
+  color: #1a1a1a;
+}
+
+.invoice-container p,
+.invoice-container span,
+.invoice-container div {
+  color: #333333;
+}
+
+.invoice-container .ant-card {
+  background-color: #ffffff;
+  color: #333333;
+  margin: 0 0 30px 0;
+  border-radius: 8px;
+}
+
+.invoice-container .ant-card-head-title {
+  color: #1a1a1a;
+}
+
+.invoice-container .ant-table {
+  background-color: #ffffff;
+  color: #333333;
+  margin: 0 0 30px 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.invoice-container .ant-table-thead > tr > th {
+  background-color: #f5f5f5;
+  color: #1a1a1a;
+}
+
+.invoice-container .ant-table-tbody > tr > td {
+  color: #333333;
 }
 
 .invoice-header-print {

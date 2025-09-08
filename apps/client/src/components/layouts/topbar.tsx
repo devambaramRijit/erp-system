@@ -17,7 +17,7 @@ const moduleLabels = {
 };
 
 export default function TopBar({ activeModule }: TopBarProps) {
-  const [notificationCount] = useState(3);
+  const [notificationCount] = useState(0);
 
   return (
     <header className="bg-card shadow-sm px-6 py-4 flex items-center justify-between border-b" data-testid="topbar">

@@ -9,8 +9,8 @@ interface Product {
   productType: string;
   productCategory: string;
   quantity: number;
-  costPricePerPiece?: number;
-  ratePerPiece?: number;
+  costPricePerPiece: number;
+  ratePerPiece: number;
   costPricePerInch?: number;
   ratePerInch?: number;
 }
@@ -31,13 +31,11 @@ const SimpleProductTab: React.FC = () => {
     productType: 'Traded',
     productCategory: '',
     quantity: 0,
-    costPricePerPiece: undefined,
-    ratePerPiece: undefined,
+    costPricePerPiece: 0,
+    ratePerPiece: 0,
     costPricePerInch: undefined,
     ratePerInch: undefined
   });
-
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // Load products from localStorage
   useEffect(() => {
@@ -70,9 +68,6 @@ const SimpleProductTab: React.FC = () => {
   useEffect(() => {
     if (!loading) {
       localStorage.setItem('simpleInventoryProducts', JSON.stringify(products));
-      
-      // Dispatch custom event to notify other components
-      window.dispatchEvent(new CustomEvent('productsUpdated'));
     }
   }, [products, loading]);
 
@@ -111,26 +106,9 @@ const SimpleProductTab: React.FC = () => {
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
   const handleEditProduct = (product: Product) => {
-    console.log('Editing product:', product.name); // Debug log
-    // Set the product to be edited
-    setEditingProduct(product);
-
-    // Populate the form with the product data
-    setNewProduct({
-      sku: product.sku,
-      name: product.name,
-      productType: product.productType,
-      productCategory: product.productCategory,
-      quantity: product.quantity,
-      costPricePerPiece: product.costPricePerPiece,
-      ratePerPiece: product.ratePerPiece,
-      costPricePerInch: product.costPricePerInch,
-      ratePerInch: product.ratePerInch,
-    });
-
-    // Show the form
-    console.log('Setting showAddForm to true'); // Debug log
-    setShowAddForm(true);
+    alert(`Edit functionality for product: ${product.name}`);
+    // Here you would typically open an edit form or modal
+    // For now, we'll just show an alert
   };
 
   const handleDeleteProduct = (id: string) => {
@@ -163,44 +141,21 @@ const SimpleProductTab: React.FC = () => {
     }
 
     try {
-      if (editingProduct) {
-        // Update existing product
-        const updatedProduct: Product = {
-          ...newProduct,
-          id: editingProduct.id
-        };
+      // Create a new product with ID
+      const newProductWithId: Product = {
+        ...newProduct,
+        id: 'prod-' + Date.now()
+      };
 
-        // Special handling for Laddu Gopal Mukut - clear inch-based pricing
-        if (updatedProduct.productCategory === 'Laddu Gopal Mukut') {
-          updatedProduct.costPricePerInch = undefined;
-          updatedProduct.ratePerInch = undefined;
-        }
-
-        // Update the product in the list
-        const updatedProducts = products.map(product => 
-          product.id === editingProduct.id ? updatedProduct : product
-        );
-        setProducts(updatedProducts);
-
-        // Reset editing state
-        setEditingProduct(null);
-      } else {
-        // Create a new product with ID
-        const newProductWithId: Product = {
-          ...newProduct,
-          id: 'prod-' + Date.now()
-        };
-
-        // Special handling for Laddu Gopal Mukut - clear inch-based pricing
-        if (newProductWithId.productCategory === 'Laddu Gopal Mukut') {
-          newProductWithId.costPricePerInch = undefined;
-          newProductWithId.ratePerInch = undefined;
-        }
-
-        // Add the new product to the list
-        const updatedProducts = [...products, newProductWithId];
-        setProducts(updatedProducts);
+      // Special handling for Laddu Gopal Mukut - clear inch-based pricing
+      if (newProductWithId.productCategory === 'Laddu Gopal Mukut') {
+        newProductWithId.costPricePerInch = undefined;
+        newProductWithId.ratePerInch = undefined;
       }
+
+      // Add the new product to the list
+      const updatedProducts = [...products, newProductWithId];
+      setProducts(updatedProducts);
 
       // Reset form
       setNewProduct({
@@ -209,8 +164,8 @@ const SimpleProductTab: React.FC = () => {
         productType: '', // Empty string instead of defaulting to Traded
         productCategory: '',
         quantity: 0,
-        costPricePerPiece: undefined,
-        ratePerPiece: undefined,
+        costPricePerPiece: 0,
+        ratePerPiece: 0,
         costPricePerInch: undefined,
         ratePerInch: undefined
       });
@@ -230,7 +185,8 @@ const SimpleProductTab: React.FC = () => {
     ];
 
     // Create CSV content with headers only (no sample data as per requirements)
-    let csvContent = headers.join(',') + '\n';
+    let csvContent = headers.join(',') + '
+';
 
     // Create a blob and download link
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -309,14 +265,7 @@ const SimpleProductTab: React.FC = () => {
       });
 
       // Merge with existing products instead of replacing
-      console.log('Previous products count:', products.length);
-      console.log('Imported products count:', transformedProducts.length);
-      setProducts((prevProducts) => {
-        console.log('Prev products count:', prevProducts.length);
-        const newProducts = [...prevProducts, ...transformedProducts];
-        console.log('New products count:', newProducts.length);
-        return newProducts;
-      });
+      setProducts((prevProducts) => [...prevProducts, ...transformedProducts]);
       alert(`Successfully imported ${transformedProducts.length} products!`);
     } catch (err) {
       console.error("Error importing file:", err);
@@ -371,7 +320,7 @@ const SimpleProductTab: React.FC = () => {
               opacity: importing ? 0.7 : 1
             }}
           >
-            {importing ? 'Importing...' : 'Upload Products'}
+            {importing ? 'Importing...' : 'Upload Products CSV'}
           </button>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
@@ -397,9 +346,7 @@ const SimpleProductTab: React.FC = () => {
           marginBottom: '20px',
           border: '1px solid #ddd'
         }}>
-          <h3 style={{ marginTop: '0', marginBottom: '15px', color: '#000' }}>
-            {editingProduct ? 'Edit Product' : 'Add New Product'}
-          </h3>
+          <h3 style={{ marginTop: '0', marginBottom: '15px', color: '#000' }}>Add New Product</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>SKU</label>
@@ -466,14 +413,7 @@ const SimpleProductTab: React.FC = () => {
                 name="costPricePerPiece"
                 value={newProduct.costPricePerPiece || ''}
                 onChange={handleInputChange}
-                disabled={newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base'}
-                style={{ 
-                  width: '100%', 
-                  padding: '8px', 
-                  border: '1px solid #ddd', 
-                  borderRadius: '4px',
-                  backgroundColor: newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base' ? '#f5f5f5' : 'white'
-                }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
               />
             </div>
             <div>
@@ -483,14 +423,7 @@ const SimpleProductTab: React.FC = () => {
                 name="ratePerPiece"
                 value={newProduct.ratePerPiece || ''}
                 onChange={handleInputChange}
-                disabled={newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base'}
-                style={{ 
-                  width: '100%', 
-                  padding: '8px', 
-                  border: '1px solid #ddd', 
-                  borderRadius: '4px',
-                  backgroundColor: newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base' ? '#f5f5f5' : 'white'
-                }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
               />
             </div>
             <div>
@@ -500,14 +433,7 @@ const SimpleProductTab: React.FC = () => {
                 name="costPricePerInch"
                 value={newProduct.costPricePerInch || ''}
                 onChange={handleInputChange}
-                disabled={newProduct.productType === 'Traded' || (newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Mukut')}
-                style={{ 
-                  width: '100%', 
-                  padding: '8px', 
-                  border: '1px solid #ddd', 
-                  borderRadius: '4px',
-                  backgroundColor: newProduct.productType === 'Traded' || (newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Mukut') ? '#f5f5f5' : 'white'
-                }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
               />
             </div>
             <div>
@@ -517,14 +443,7 @@ const SimpleProductTab: React.FC = () => {
                 name="ratePerInch"
                 value={newProduct.ratePerInch || ''}
                 onChange={handleInputChange}
-                disabled={newProduct.productType === 'Traded' || (newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Mukut')}
-                style={{ 
-                  width: '100%', 
-                  padding: '8px', 
-                  border: '1px solid #ddd', 
-                  borderRadius: '4px',
-                  backgroundColor: newProduct.productType === 'Traded' || (newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Mukut') ? '#f5f5f5' : 'white'
-                }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
               />
             </div>
           </div>
@@ -540,37 +459,8 @@ const SimpleProductTab: React.FC = () => {
                 cursor: 'pointer'
               }}
             >
-              {editingProduct ? 'Update Product' : 'Add Product'}
+              Add Product
             </button>
-            {editingProduct && (
-              <button
-                onClick={() => {
-                  setEditingProduct(null);
-                  setNewProduct({
-                    sku: '',
-                    name: '',
-                    productType: '',
-                    productCategory: '',
-                    quantity: 0,
-                    costPricePerPiece: undefined,
-                    ratePerPiece: undefined,
-                    costPricePerInch: undefined,
-                    ratePerInch: undefined
-                  });
-                }}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#f44336',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  marginLeft: '10px'
-                }}
-              >
-                Cancel Edit
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -583,7 +473,7 @@ const SimpleProductTab: React.FC = () => {
         <>
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
             <thead>
-              <tr style={{ backgroundColor: '#f2f2f2', color: '#000' }}>
+              <tr style={{ backgroundColor: '#f2f2f2' }}>
                 <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('productType')}>
                   Product Type {sortConfig?.key === 'productType' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
@@ -617,7 +507,7 @@ const SimpleProductTab: React.FC = () => {
             <tbody>
               {currentItems.map(product => (
                 <tr key={product.id}>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productType || 'Traded'}</td>
+                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productType}</td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.sku}</td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.name}</td>
                   <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productCategory}</td>

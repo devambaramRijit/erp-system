@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import InventoryScreen from './InventoryScreen';
 import ProductManagementUpdated from './ProductManagementUpdated';
 import InvoiceScreen from './InvoiceScreen';
+import InvoiceNavigation from './InvoiceNavigation';
 import CustomerScreen from './CustomerScreen';
 
 function App() {
@@ -226,7 +227,7 @@ function App() {
       <div>
         {activeTab === 'dashboard' && <Dashboard user={user} onLogout={handleLogout} />}
         {activeTab === 'inventory' && <ProductManagementUpdated />}
-        {activeTab === 'invoice' && <InvoiceScreen />}
+        {activeTab === 'invoice' && <InvoiceNavigation />}
         {activeTab === 'customers' && <CustomerScreen />}
       </div>
     </div>

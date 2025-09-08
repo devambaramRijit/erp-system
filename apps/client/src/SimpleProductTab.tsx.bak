@@ -1,0 +1,714 @@
+import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
+import Papa from "papaparse";
+import * as XLSX from "xlsx";
+
+interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  productType: string;
+  productCategory: string;
+  quantity: number;
+  costPricePerPiece: number;
+  ratePerPiece: number;
+  costPricePerInch?: number;
+  ratePerInch?: number;
+}
+
+const SimpleProductTab: React.FC = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Product; direction: 'asc' | 'desc' } | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [newProduct, setNewProduct] = useState<Omit<Product, 'id'>>({
+    sku: '',
+    name: '',
+    productType: 'Traded',
+    productCategory: '',
+    quantity: 0,
+    costPricePerPiece: 0,
+    ratePerPiece: 0,
+    costPricePerInch: undefined,
+    ratePerInch: undefined
+  });
+
+  // Load products from localStorage
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+
+        // Always try to fetch from localStorage first
+        const savedProducts = localStorage.getItem('simpleInventoryProducts');
+        if (savedProducts) {
+          setProducts(JSON.parse(savedProducts));
+        } else {
+          // Initialize with empty array if no data in localStorage
+          setProducts([]);
+        }
+        
+        setError(null);
+      } catch (err) {
+        setError('Failed to fetch products');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+  
+  // Save products to localStorage whenever they change
+  useEffect(() => {
+    if (!loading) {
+      localStorage.setItem('simpleInventoryProducts', JSON.stringify(products));
+    }
+  }, [products, loading]);
+
+  // Handle sorting
+  const requestSort = (key: keyof Product) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // Get sorted products
+  const getSortedProducts = () => {
+    const sortableProducts = [...products];
+    if (sortConfig !== null) {
+      sortableProducts.sort((a, b) => {
+        if (a[sortConfig.key] < b[sortConfig.key]) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (a[sortConfig.key] > b[sortConfig.key]) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableProducts;
+  };
+
+  // Pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = getSortedProducts().slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(products.length / itemsPerPage);
+
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  const handleEditProduct = (product: Product) => {
+    alert(`Edit functionality for product: ${product.name}`);
+    // Here you would typically open an edit form or modal
+    // For now, we'll just show an alert
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
+        const updatedProducts = products.filter(product => product.id !== id);
+        setProducts(updatedProducts);
+      } catch (err) {
+        setError('Failed to delete product');
+        console.error(err);
+      }
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setNewProduct({
+      ...newProduct,
+      [name]: name === 'quantity' || name === 'costPricePerPiece' || name === 'ratePerPiece' || name === 'costPricePerInch' || name === 'ratePerInch'
+        ? value === '' ? undefined : Number(value)
+        : value
+    });
+  };
+
+  const handleAddProduct = async () => {
+    // Form validation
+    if (!newProduct.sku || !newProduct.name || !newProduct.productCategory) {
+      alert('SKU, Name, and Product Category are required');
+      return;
+    }
+
+    try {
+      // Create a new product with ID
+      const newProductWithId: Product = {
+        ...newProduct,
+        id: 'prod-' + Date.now()
+      };
+      
+      // Special handling for Laddu Gopal Mukut - clear inch-based pricing
+      if (newProductWithId.productCategory === 'Laddu Gopal Mukut') {
+        newProductWithId.costPricePerInch = undefined;
+        newProductWithId.ratePerInch = undefined;
+      }
+      
+      // Add the new product to the list
+      const updatedProducts = [...products, newProductWithId];
+      setProducts(updatedProducts);
+      
+      // Reset form
+      setNewProduct({
+        sku: '',
+        name: '',
+        productType: '', // Empty string instead of defaulting to Traded
+        productCategory: '',
+        quantity: 0,
+        costPricePerPiece: 0,
+        ratePerPiece: 0,
+        costPricePerInch: undefined,
+        ratePerInch: undefined
+      });
+      setShowAddForm(false);
+    } catch (err) {
+      setError('Failed to add product');
+      console.error(err);
+    }
+  };
+
+// Function to download CSV template
+const downloadTemplate = () => {
+  // Headers matching the Product interface
+  const headers = [
+    'Product Type',
+    'SKU',
+    'Product Name',
+    'Product Category',
+    'Quantity',
+    'Cost Price Per Piece',
+    'Rate Per Piece',
+    'Cost Price Per Inch',
+    'Rate Per Inch'
+  ];
+
+  // Create CSV with just headers
+  const csvContent = headers.join(',') + '\n';
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'product_template.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+  // Function to handle file upload (CSV or Excel)
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    console.log(`File selected: ${file.name}, size: ${file.size}, type: ${file.type}`);
+    setImporting(true);
+    setError(null);
+
+    try {
+      let rows: any[] = [];
+
+      if (file.name.endsWith(".csv")) {
+        // Parse CSV
+        const text = await file.text();
+        const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+        rows = result.data as any[];
+      } else if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+        // Parse Excel
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      } else {
+        alert("Unsupported file type. Please upload CSV or Excel.");
+        return;
+      }
+
+      console.log("Parsed rows:", rows);
+
+      // Transform rows into Product objects
+      const transformedProducts: Product[] = rows.map((item: any) => {
+        const category = item["Product Category"]?.trim() || "";
+        const isManufactured =
+          category === "Laddu Gopal Base" ||
+          category === "Laddu Gopal Dress" ||
+          category === "Laddu Gopal Mukut";
+
+        return {
+          // Determine product type based on category
+          const isManufactured = item.category === 'Laddu Gopal Base' || item.category === 'Laddu Gopal Dress' || item.category === 'Laddu Gopal Mukut';
+          
+          return {
+            id: item.id,
+            sku: item.sku,
+            name: item.name,
+            productType: isManufactured ? 'Manufactured' : 'Traded',
+            productCategory: item.category,
+            quantity: item.quantity,
+            costPricePerPiece: isManufactured && item.category === 'Laddu Gopal Mukut' ? item.price : undefined,
+            ratePerPiece: isManufactured && item.category === 'Laddu Gopal Mukut' ? item.price * 1.5 : undefined, // Assuming 50% profit margin
+            costPricePerInch: isManufactured && (item.category === 'Laddu Gopal Base' || item.category === 'Laddu Gopal Dress') ? item.price / 10 : undefined,
+            ratePerInch: isManufactured && (item.category === 'Laddu Gopal Base' || item.category === 'Laddu Gopal Dress') ? (item.price / 10) * 1.5 : undefined
+          };
+        });
+        
+        setProducts(prevProducts => [...prevProducts, ...transformedProducts]);
+        alert(`Successfully imported ${transformedProducts.length} products!`);
+      }
+    } catch (err) {
+      setError('Failed to import products from CSV');
+      console.error('Error importing CSV:', err);
+      if (axios.isAxiosError(err) && err.response) {
+        console.error('Server response:', err.response.data);
+      }
+      alert(`Error importing products: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setImporting(false);
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  return (
+    <div>
+      {/* Hidden file input for CSV and Excel import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        accept=".csv,.xlsx,.xls"
+        onChange={handleFileUpload}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>Product List</h2>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={downloadTemplate}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#FF9800',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Download CSV Template
+          </button>
+          <button
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.click();
+              }
+            }}
+            disabled={importing}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: importing ? '#90CAF9' : '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: importing ? 'not-allowed' : 'pointer',
+              opacity: importing ? 0.7 : 1
+            }}
+          >
+            {importing ? 'Importing...' : 'Import from CSV'}
+          </button>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            {showAddForm ? 'Cancel' : 'Add Product'}
+          </button>
+        </div>
+      </div>
+      
+      {showAddForm && (
+        <div style={{ 
+          backgroundColor: '#f9f9f9', 
+          padding: '20px', 
+          borderRadius: '8px', 
+          marginBottom: '20px',
+          border: '1px solid #ddd'
+        }}>
+          <h3 style={{ marginTop: '0', marginBottom: '15px', color: '#000' }}>Add New Product</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>SKU</label>
+              <input
+                type="text"
+                name="sku"
+                value={newProduct.sku}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                placeholder="Enter SKU"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Name</label>
+              <input
+                type="text"
+                name="name"
+                value={newProduct.name}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                placeholder="Enter product name"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Product Type</label>
+              <select
+                name="productType"
+                value={newProduct.productType}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+              >
+                <option value="Traded">Traded</option>
+                <option value="Manufactured">Manufactured</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Product Category</label>
+              <input
+                type="text"
+                name="productCategory"
+                value={newProduct.productCategory}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                placeholder="Enter category"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Quantity</label>
+              <input
+                type="number"
+                name="quantity"
+                value={newProduct.quantity}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                min="0"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Cost Price per Piece</label>
+              <input
+                type="number"
+                name="costPricePerPiece"
+                value={newProduct.costPricePerPiece || ''}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                min="0"
+                step="0.01"
+                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Base' || newProduct.productCategory === 'Laddu Gopal Dress') && newProduct.productCategory !== 'Laddu Gopal Mukut'}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Rate per Piece</label>
+              <input
+                type="number"
+                name="ratePerPiece"
+                value={newProduct.ratePerPiece || ''}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                min="0"
+                step="0.01"
+                disabled={newProduct.productType === 'Manufactured' && (newProduct.productCategory === 'Laddu Gopal Base' || newProduct.productCategory === 'Laddu Gopal Dress') && newProduct.productCategory !== 'Laddu Gopal Mukut'}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Cost Price per Inch</label>
+              <input
+                type="number"
+                name="costPricePerInch"
+                value={newProduct.costPricePerInch || ''}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                min="0"
+                step="0.01"
+                disabled={newProduct.productType !== 'Manufactured' || (newProduct.productCategory !== 'Laddu Gopal Base' && newProduct.productCategory !== 'Laddu Gopal Dress' && newProduct.productCategory !== 'Laddu Gopal Mukut')}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', color: '#000', fontWeight: 'bold' }}>Rate per Inch</label>
+              <input
+                type="number"
+                name="ratePerInch"
+                value={newProduct.ratePerInch || ''}
+                onChange={handleInputChange}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                min="0"
+                step="0.01"
+                disabled={newProduct.productType !== 'Manufactured' || (newProduct.productCategory !== 'Laddu Gopal Base' && newProduct.productCategory !== 'Laddu Gopal Dress' && newProduct.productCategory !== 'Laddu Gopal Mukut')}
+              />
+            </div>
+          </div>
+          <div style={{ marginTop: '15px', textAlign: 'right' }}>
+            <button
+              onClick={() => setShowAddForm(false)}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                marginRight: '10px'
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAddProduct}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Add Product
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <p>Loading products...</p>
+      ) : error ? (
+        <p style={{ color: 'red' }}>{error}</p>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ddd' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f2f2f2', color: '#000' }}>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('productType')}
+                  >
+                    Product Type {sortConfig?.key === 'productType' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('sku')}
+                  >
+                    SKU {sortConfig?.key === 'sku' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('name')}
+                  >
+                    Product Name {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('productCategory')}
+                  >
+                    Product Category {sortConfig?.key === 'productCategory' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('quantity')}
+                  >
+                    Quantity {sortConfig?.key === 'quantity' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('costPricePerPiece')}
+                  >
+                    Cost Price per Piece {sortConfig?.key === 'costPricePerPiece' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('ratePerPiece')}
+                  >
+                    Rate per Piece {sortConfig?.key === 'ratePerPiece' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('costPricePerInch')}
+                  >
+                    Cost Price per Inch {sortConfig?.key === 'costPricePerInch' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th
+                    style={{
+                      padding: '12px',
+                      textAlign: 'left',
+                      border: '1px solid #ddd',
+                      cursor: 'pointer',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => requestSort('ratePerInch')}
+                  >
+                    Rate per Inch {sortConfig?.key === 'ratePerInch' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th style={{ padding: '12px', textAlign: 'left', border: '1px solid #ddd' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentItems.length > 0 ? (
+                  currentItems.map(product => (
+                    <tr key={product.id}>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productType}</td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.sku}</td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.name}</td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productCategory}</td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.quantity}</td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                        {product.costPricePerPiece !== undefined ? `$${product.costPricePerPiece.toFixed(2)}` : '-'}
+                      </td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                        {product.ratePerPiece !== undefined ? `$${product.ratePerPiece.toFixed(2)}` : '-'}
+                      </td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                        {product.costPricePerInch !== undefined ? `$${product.costPricePerInch.toFixed(2)}` : '-'}
+                      </td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                        {product.ratePerInch !== undefined ? `$${product.ratePerInch.toFixed(2)}` : '-'}
+                      </td>
+                      <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                        <button
+                          style={{
+                            backgroundColor: '#2196F3',
+                            color: 'white',
+                            border: 'none',
+                            padding: '5px 10px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            marginRight: '5px'
+                          }}
+                          onClick={() => handleEditProduct(product)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          style={{
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            padding: '5px 10px',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => handleDeleteProduct(product.id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '12px', textAlign: 'center', border: '1px solid #ddd' }}>
+                      No products found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(number => (
+              <button
+                key={number}
+                onClick={() => paginate(number)}
+                style={{
+                  margin: '0 5px',
+                  padding: '5px 10px',
+                  backgroundColor: currentPage === number ? '#2196F3' : '#f1f1f1',
+                  color: currentPage === number ? 'white' : 'black',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {number}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default SimpleProductTab;

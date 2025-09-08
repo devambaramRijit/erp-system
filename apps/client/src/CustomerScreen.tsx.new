@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Button,
-  Card,
-  Form,
-  Input,
-  Select,
-  Table,
-  Space,
-  Typography,
-  Divider,
-  Row,
-  Col,
+import React, { useState, useEffect } from 'react';
+import { 
+  Button, 
+  Card, 
+  Form, 
+  Input, 
+  Select, 
+  Table, 
+  Space, 
+  Typography, 
+  Divider, 
+  Row, 
+  Col, 
   message,
   Tag,
   Tooltip,
@@ -19,11 +19,11 @@ import {
   Spin,
   Alert
 } from 'antd';
-import {
-  PlusOutlined,
-  SearchOutlined,
-  EditOutlined,
-  DeleteOutlined,
+import { 
+  PlusOutlined, 
+  SearchOutlined, 
+  EditOutlined, 
+  DeleteOutlined, 
   UserOutlined,
   ImportOutlined,
   CloseOutlined,
@@ -69,7 +69,6 @@ const CustomerScreen = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<Omit<CustomerData, 'id'>>(initialFormData);
-  const [form] = Form.useForm();
 
   useEffect(() => {
     fetchCustomers();
@@ -81,7 +80,7 @@ const CustomerScreen = () => {
       setFilteredCustomers(customers);
     } else {
       const term = searchTerm.toLowerCase();
-      const filtered = customers.filter(customer => 
+      const filtered = customers.filter(customer =>
         customer.customerName && customer.customerName.toLowerCase().includes(term) ||
         customer.mobileNumber1 && customer.mobileNumber1.includes(term) ||
         customer.city && customer.city.toLowerCase().includes(term) ||
@@ -94,7 +93,7 @@ const CustomerScreen = () => {
   const fetchCustomers = async () => {
     try {
       setIsLoading(true);
-      
+
       // First try to get customers from localStorage
       const savedCustomers = localStorage.getItem('customers');
       if (savedCustomers) {
@@ -119,29 +118,30 @@ const CustomerScreen = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSaveError(null);
     setIsSaving(true);
 
     try {
-      console.log('Saving customer data:', values);
-      
+      console.log('Saving customer data:', formData);
+
       // Standardize state before saving
       const normalizedData = {
-        ...values,
-        state: standardizeState(values.state)
+        ...formData,
+        state: standardizeState(formData.state)
       };
-      
+
       let updatedCustomers;
-      
+
       if (editingCustomer) {
         // Update existing customer
         console.log(`Updating customer with ID: ${editingCustomer.id}`);
         await mockCustomerApi.updateCustomer(editingCustomer.id, normalizedData);
         console.log('Update successful');
-        
+
         // Update localStorage
-        updatedCustomers = customers.map(customer => 
+        updatedCustomers = customers.map(customer =>
           customer.id === editingCustomer.id ? { ...normalizedData, id: editingCustomer.id } : customer
         );
       } else {
@@ -149,11 +149,11 @@ const CustomerScreen = () => {
         console.log('Creating new customer');
         const newCustomer = await mockCustomerApi.createCustomer(normalizedData);
         console.log('Create successful');
-        
+
         // Update localStorage
         updatedCustomers = [...customers, newCustomer];
       }
-      
+
       // Save to localStorage
       localStorage.setItem('customers', JSON.stringify(updatedCustomers));
 
@@ -176,7 +176,7 @@ const CustomerScreen = () => {
 
   const handleEdit = (customer: CustomerData) => {
     setEditingCustomer(customer);
-    const values = {
+    setFormData({
       customerName: customer.customerName,
       houseNumber: customer.houseNumber,
       city: customer.city,
@@ -187,9 +187,7 @@ const CustomerScreen = () => {
       mobileNumber1: customer.mobileNumber1,
       mobileNumber2: customer.mobileNumber2,
       source: customer.source
-    };
-    setFormData(values);
-    form.setFieldsValue(values);
+    });
     setShowAddForm(true);
   };
 
@@ -197,17 +195,17 @@ const CustomerScreen = () => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
       try {
         await mockCustomerApi.deleteCustomer(id);
-        
+
         // Also remove from localStorage
         const updatedCustomers = customers.filter(customer => customer.id !== id);
         localStorage.setItem('customers', JSON.stringify(updatedCustomers));
 
         // Dispatch custom event to notify other components
         window.dispatchEvent(new CustomEvent('customersUpdated'));
-        
+
         // Update state
         setCustomers(updatedCustomers);
-        setFilteredCustomers(updatedCustomers.filter(customer => 
+        setFilteredCustomers(updatedCustomers.filter(customer =>
           customer.customerName && customer.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           customer.mobileNumber1 && customer.mobileNumber1.includes(searchTerm) ||
           customer.city && customer.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -224,13 +222,12 @@ const CustomerScreen = () => {
     setFormData(initialFormData);
     setEditingCustomer(null);
     setShowAddForm(false);
-    form.resetFields();
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setSelectedFile(file);
   };
 
@@ -264,7 +261,7 @@ const CustomerScreen = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Customer Management</h1>
           <p className="text-gray-600">Manage your customer database</p>
         </div>
-        
+
         {/* Action Buttons */}
         <div className="mb-6 flex flex-wrap gap-3">
           <Button 
@@ -304,200 +301,166 @@ const CustomerScreen = () => {
               {editingCustomer ? 'Update customer information' : 'Fill in the customer details below'}
             </Typography.Paragraph>
 
-          {saveError && (
-            <Alert 
-              message={saveError} 
-              type="error" 
-              className="mb-4" 
-              showIcon 
-              closable
-            />
-          )}
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleSubmit}
-            className="customer-form"
-          >
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item 
-                  label="Customer Name" 
-                  name="customerName"
-                  rules={[{ required: true, message: 'Please input customer name!' }]}
-                >
-                  <Input
+            {saveError && (
+              <Alert 
+                message={saveError} 
+                type="error" 
+                className="mb-4" 
+                showIcon 
+                closable
+              />
+            )}
+            <Form
+              layout="vertical"
+              onFinish={handleSubmit}
+              className="customer-form"
+            >
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item 
+                    label="Customer Name" 
                     name="customerName"
-                    value={formData.customerName}
-                    onChange={handleInputChange}
-                    prefix={<UserOutlined />}
-                    placeholder="Enter customer name"
-                  />
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item 
-                  label="Mobile Number 1" 
-                  name="mobileNumber1"
-                  rules={[{ required: true, message: 'Please input mobile number!' }]}
-                >
-                  <Input
-                    type="tel"
-                    name="mobileNumber1"
-                    value={formData.mobileNumber1}
-                    onChange={handleInputChange}
-                    placeholder="Enter primary mobile number"
-                  />
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item label="Mobile Number 2" name="mobileNumber2">
-                  <Input
-                    type="tel"
-                    name="mobileNumber2"
-                    value={formData.mobileNumber2}
-                    onChange={handleInputChange}
-                    placeholder="Enter secondary mobile number"
-                  />
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item label="Source" name="source">
-                  <Input
-                    name="source"
-                    value={formData.source}
-                    onChange={handleInputChange}
-                    placeholder="Enter source"
-                  />
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item label="House/Flat/Street No." name="houseNumber">
-                  <Input
-                    name="houseNumber"
-                    value={formData.houseNumber}
-                    onChange={handleInputChange}
-                    placeholder="Enter house/flat/street number"
-                  />
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item label="City/Town/Village" name="city">
-                  <Input
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    placeholder="Enter city/town/village"
-                  />
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item label="P.O/District" name="district">
-                  <Input
-                    name="district"
-                    value={formData.district}
-                    onChange={handleInputChange}
-                    placeholder="Enter district"
-                  />
-                </Form.Item>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Form.Item label="State" name="state">
-                  <Select
-                    name="state"
-                    value={formData.state}
-                    onChange={(value) => handleInputChange({ target: { name: 'state', value } } as any)}
-                    placeholder="Select a state"
+                    rules={[{ required: true, message: 'Please input customer name!' }]}
                   >
-                    <Select.Option value="">Select a state</Select.Option>
-      <option value="Andhra Pradesh">Andhra Pradesh</option>
-      <option value="Arunachal Pradesh">Arunachal Pradesh</option>
-      <option value="Assam">Assam</option>
-      <option value="Bihar">Bihar</option>
-      <option value="Chhattisgarh">Chhattisgarh</option>
-      <option value="Goa">Goa</option>
-      <option value="Gujarat">Gujarat</option>
-      <option value="Haryana">Haryana</option>
-      <option value="Himachal Pradesh">Himachal Pradesh</option>
-      <option value="Jharkhand">Jharkhand</option>
-      <option value="Karnataka">Karnataka</option>
-      <option value="Kerala">Kerala</option>
-      <option value="Madhya Pradesh">Madhya Pradesh</option>
-      <option value="Maharashtra">Maharashtra</option>
-      <option value="Manipur">Manipur</option>
-      <option value="Meghalaya">Meghalaya</option>
-      <option value="Mizoram">Mizoram</option>
-      <option value="Nagaland">Nagaland</option>
-      <option value="Odisha">Odisha</option>
-      <option value="Punjab">Punjab</option>
-      <option value="Rajasthan">Rajasthan</option>
-      <option value="Sikkim">Sikkim</option>
-      <option value="Tamil Nadu">Tamil Nadu</option>
-      <option value="Telangana">Telangana</option>
-      <option value="Tripura">Tripura</option>
-      <option value="Uttar Pradesh">Uttar Pradesh</option>
-      <option value="Uttarakhand">Uttarakhand</option>
-      <option value="West Bengal">West Bengal</option>
-            <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
-      <option value="Chandigarh">Chandigarh</option>
-      <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
-      <option value="Delhi">Delhi</option>
-      <option value="Jammu and Kashmir">Jammu and Kashmir</option>
-      <option value="Ladakh">Ladakh</option>
-      <option value="Lakshadweep">Lakshadweep</option>
-      <option value="Puducherry">Puducherry</option>
+                    <Input
+                      name="customerName"
+                      value={formData.customerName}
+                      onChange={handleInputChange}
+                      prefix={<UserOutlined />}
+                      placeholder="Enter customer name"
+                    />
+                  </Form.Item>
+                </Col>
 
-                  </Select>
-                </Form.Item>
-              </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item 
+                    label="Mobile Number 1" 
+                    name="mobileNumber1"
+                    rules={[{ required: true, message: 'Please input mobile number!' }]}
+                  >
+                    <Input
+                      type="tel"
+                      name="mobileNumber1"
+                      value={formData.mobileNumber1}
+                      onChange={handleInputChange}
+                      placeholder="Enter primary mobile number"
+                    />
+                  </Form.Item>
+                </Col>
 
-              <Col xs={24} sm={12}>
-                <Form.Item label="PIN Code" name="pinCode">
-                  <Input
-                    type="text"
-                    name="pinCode"
-                    value={formData.pinCode}
-                    onChange={handleInputChange}
-                    placeholder="Enter PIN code"
-                  />
-                </Form.Item>
-              </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="Mobile Number 2" name="mobileNumber2">
+                    <Input
+                      type="tel"
+                      name="mobileNumber2"
+                      value={formData.mobileNumber2}
+                      onChange={handleInputChange}
+                      placeholder="Enter secondary mobile number"
+                    />
+                  </Form.Item>
+                </Col>
 
-              <Col xs={24}>
-                <Form.Item label="Landmark" name="landmark">
-                  <Input
-                    name="landmark"
-                    value={formData.landmark}
-                    onChange={handleInputChange}
-                    placeholder="Enter landmark"
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="Source" name="source">
+                    <Input
+                      name="source"
+                      value={formData.source}
+                      onChange={handleInputChange}
+                      placeholder="Enter source"
+                    />
+                  </Form.Item>
+                </Col>
 
-            <div className="mt-4 flex justify-end space-x-3">
-              <Button
-                onClick={resetForm}
-              >
-                Clear
-              </Button>
-              <Button
-                type="primary"
-                htmlType="submit"
-                icon={<SaveOutlined />}
-                loading={isSaving}
-              >
-                {isSaving ? 'Saving...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
-              </Button>
-            </div>
-          </Form>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="House/Flat/Street No." name="houseNumber">
+                    <Input
+                      name="houseNumber"
+                      value={formData.houseNumber}
+                      onChange={handleInputChange}
+                      placeholder="Enter house/flat/street number"
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12}>
+                  <Form.Item label="City/Town/Village" name="city">
+                    <Input
+                      name="city"
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      placeholder="Enter city/town/village"
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12}>
+                  <Form.Item label="P.O/District" name="district">
+                    <Input
+                      name="district"
+                      value={formData.district}
+                      onChange={handleInputChange}
+                      placeholder="Enter district"
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12}>
+                  <Form.Item label="State" name="state">
+                    <Select
+                      name="state"
+                      value={formData.state}
+                      onChange={(value) => handleInputChange({ target: { name: 'state', value } } as any)}
+                      placeholder="Select a state"
+                    >
+                      <Select.Option value="">Select a state</Select.Option>
+                      <Select.Option value="State 1">State 1</Select.Option>
+                      <Select.Option value="State 2">State 2</Select.Option>
+                      <Select.Option value="State 3">State 3</Select.Option>
+                      <Select.Option value="State 4">State 4</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12}>
+                  <Form.Item label="PIN Code" name="pinCode">
+                    <Input
+                      type="text"
+                      name="pinCode"
+                      value={formData.pinCode}
+                      onChange={handleInputChange}
+                      placeholder="Enter PIN code"
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24}>
+                  <Form.Item label="Landmark" name="landmark">
+                    <Input
+                      name="landmark"
+                      value={formData.landmark}
+                      onChange={handleInputChange}
+                      placeholder="Enter landmark"
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <div className="mt-4 flex justify-end space-x-3">
+                <Button
+                  onClick={resetForm}
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  icon={<SaveOutlined />}
+                  loading={isSaving}
+                >
+                  {isSaving ? 'Saving...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
+                </Button>
+              </div>
+            </Form>
           </Card>
         )}
 
@@ -620,69 +583,51 @@ const CustomerScreen = () => {
           footer={null}
           width={600}
         >
+          <Typography.Paragraph>
+            Upload an Excel file with customer data. The file should have columns for:
+            Customer Name, House No./Flat No./Street No., City/Town/Village, P.O/District,
+            State, PIN Code, Landmark, Mobile No., Mobile No. 2, Source.
+          </Typography.Paragraph>
 
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-4">
-                    Upload an Excel file with customer data. The file should have columns for:
-                    Customer Name, House No./Flat No./Street No., City/Town/Village, P.O/District, 
-                    State, PIN Code, Landmark, Mobile No., Mobile No. 2, Source.
-                  </p>
+          <Upload.Dragger
+            name="file"
+            beforeUpload={() => false}
+            onChange={handleFileUpload}
+            accept=".xlsx, .xls"
+            maxCount={1}
+            showUploadList={false}
+          >
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p className="ant-upload-text">Click or drag file to this area to upload</p>
+            <p className="ant-upload-hint">Support for .xlsx, .xls files only. Max file size: 10MB.</p>
+          </Upload.Dragger>
 
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Select Excel File
-                    </label>
-                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                      <div className="space-y-1 text-center">
-                        <svg
-                          className="mx-auto h-8 w-8 text-gray-400"
-                          stroke="currentColor"
-                          fill="none"
-                          viewBox="0 0 48 48"
-                          aria-hidden="true"
-                        >
-                          <path
-                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                        <div className="flex text-sm text-gray-600">
-                          <label
-                            htmlFor="excelFileInput"
-                            className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                          >
-                            <span>Upload a file</span>
-                            <input id="excelFileInput" name="excelFileInput" type="file" className="sr-only" onChange={handleFileUpload} accept=".xlsx, .xls" />
-                          </label>
-                          <p className="pl-1">or drag and drop</p>
-                        </div>
-                        <p className="text-xs text-gray-500">XLS, XLSX up to 10MB</p>
-                        {selectedFile && (
-                          <p className="text-sm text-green-600 mt-2">Selected file: {selectedFile.name}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          {selectedFile && (
+            <Alert
+              message={`Selected file: ${selectedFile.name}`}
+              type="info"
+              className="mt-4"
+              showIcon
+              closable
+            />
+          )}
 
-                <div className="mt-6 flex justify-end space-x-2">
-                  <button
-                    onClick={() => setShowImportModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleImportFile}
-                    disabled={!selectedFile}
-                    className={`px-4 py-2 rounded-md ${selectedFile ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
-                  >
-                    Import Customers
-                  </button>
-                </div>
-          </Modal>
+          <div className="mt-6 flex justify-end space-x-2">
+            <Button onClick={() => setShowImportModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleImportFile}
+              disabled={!selectedFile}
+              icon={<ImportOutlined />}
+            >
+              Import Customers
+            </Button>
+          </div>
+        </Modal>
       </div>
     </div>
   );
