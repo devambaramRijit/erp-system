@@ -327,6 +327,7 @@ useEffect(() => {
   // Handles Adding Invoice to the
   const handleAddInvoice = () => {
     setEditingInvoice(null);
+    setSelectedCustomer(null); // Reset selected customer
     
     // Generate invoice number based on financial year (April 1 to March 31)
     const generateInvoiceNumber = () => {
@@ -401,6 +402,13 @@ useEffect(() => {
     setEditingInvoice(invoice);
     form.setFieldsValue(invoice);
     setCurrentInvoice(invoice);
+    
+    // Find and set the selected customer based on customer name
+    const customer = customers.find(c => c.customerName === invoice.customerName);
+    if (customer) {
+      setSelectedCustomer(customer);
+    }
+    
     setVisible(true);
   };
 
@@ -1244,7 +1252,10 @@ useEffect(() => {
         onCancel={() => setVisible(false)}
         width={800}
         footer={[
-          <Button key="back" onClick={() => setVisible(false)}>
+          <Button key="back" onClick={() => {
+            setVisible(false);
+            setSelectedCustomer(null); // Reset selected customer when closing modal
+          }}>
             Cancel
           </Button>,
           <Button key="submit" type="primary" onClick={handleSaveInvoice} icon={<SaveOutlined />}>
@@ -1332,7 +1343,7 @@ useEffect(() => {
                 name="customerName"
                 label="Customer Name"
               >
-                <Input readOnly />
+                <Input />
               </Form.Item>
             </Col>
             <Col span={8}>
@@ -1340,7 +1351,7 @@ useEffect(() => {
                 name="customerEmail"
                 label="Customer Email/Phone"
               >
-                <Input readOnly />
+                <Input />
               </Form.Item>
             </Col>
             <Col span={8}>
@@ -1348,8 +1359,78 @@ useEffect(() => {
                 name="billingAddress"
                 label="Billing Address"
               >
-                <Input.TextArea readOnly autoSize={{ minRows: 1, maxRows: 3 }} />
+                <Input.TextArea autoSize={{ minRows: 1, maxRows: 3 }} />
               </Form.Item>
+            </Col>
+          </Row>
+          <Row>
+            <Col span={24} style={{ textAlign: 'right', marginBottom: '20px' }}>
+              <Button 
+                type="primary" 
+                onClick={() => {
+                  if (selectedCustomer) {
+                    // Get the updated values from the form
+                    const updatedValues = form.getFieldsValue(['customerName', 'customerEmail', 'billingAddress']);
+                    
+                    // Parse the billing address to extract individual components
+                    // This is a simplified approach - in a real app, you might want a more robust parser
+                    const addressParts = updatedValues.billingAddress.split(', ');
+                    const houseNumber = addressParts[0] || '';
+                    const city = addressParts[1] || '';
+                    const district = addressParts[2] || '';
+                    const stateAndPin = addressParts[3] || '';
+                    
+                    // Extract state and pin code
+                    const stateParts = stateAndPin.split(' - ');
+                    const state = stateParts[0] || '';
+                    const pinCode = stateParts[1] || '';
+                    
+                    // Extract landmark if present
+                    const landmarkMatch = updatedValues.billingAddress.match(/\(Landmark: (.+)\)/);
+                    const landmark = landmarkMatch ? landmarkMatch[1] : '';
+                    
+                    // Create the updated customer object
+                    const updatedCustomer = {
+                      ...selectedCustomer,
+                      customerName: updatedValues.customerName,
+                      mobileNumber1: updatedValues.customerEmail,
+                      houseNumber,
+                      city,
+                      district,
+                      state,
+                      pinCode,
+                      landmark
+                    };
+                    
+                    // Update customers list
+                    const updatedCustomers = customers.map(customer => 
+                      customer.id === selectedCustomer.id ? updatedCustomer : customer
+                    );
+                    setCustomers(updatedCustomers);
+                    
+                    // Save to localStorage
+                    localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+                    
+                    // Update the selected customer
+                    setSelectedCustomer(updatedCustomer);
+                    
+                    // Update the current invoice if it exists
+                    if (currentInvoice) {
+                      setCurrentInvoice({
+                        ...currentInvoice,
+                        customerName: updatedCustomer.customerName,
+                        customerEmail: updatedCustomer.mobileNumber1,
+                        billingAddress: updatedValues.billingAddress,
+                      });
+                    }
+                    
+                    message.success('Customer information updated successfully');
+                  }
+                }}
+                disabled={!selectedCustomer}
+              >
+                Update Customer Information
+              </Button>
             </Col>
           </Row>
 
@@ -1481,16 +1562,18 @@ useEffect(() => {
                 </Col>
               </Row>
             )}
-            <Row style={{ marginTop: 8 }}>
-              <Col span={18}>
-                <div style={{ textAlign: 'right', color: '#333' }}>Discount:</div>
-              </Col>
-              <Col span={6}>
-                <div style={{ textAlign: 'right', color: '#333' }}>
-                  -₹{(currentInvoice?.discountAmount || 0).toFixed(2)}
-                </div>
-              </Col>
-            </Row>
+            {(currentInvoice?.discountAmount || 0) > 0 && (
+              <Row style={{ marginTop: 8 }}>
+                <Col span={18}>
+                  <div style={{ textAlign: 'right', color: '#333' }}>Discount:</div>
+                </Col>
+                <Col span={6}>
+                  <div style={{ textAlign: 'right', color: '#333' }}>
+                    -₹{(currentInvoice?.discountAmount || 0).toFixed(2)}
+                  </div>
+                </Col>
+              </Row>
+            )}
             <Row style={{ marginTop: 8 }}>
               <Col span={18}>
                 <div style={{ textAlign: 'right', color: '#333' }}>Shipping Charges:</div>
@@ -1851,10 +1934,12 @@ useEffect(() => {
                 <span>-₹{(currentInvoice?.advancePayment || 0).toFixed(2)}</span>
               </div>
             )}
-            <div className="invoice-totals-row">
-              <span>Discount: </span>
-              <span>-₹{(currentInvoice?.discountAmount || 0).toFixed(2)}</span>
-            </div>
+            {(currentInvoice?.discountAmount || 0) > 0 && (
+              <div className="invoice-totals-row">
+                <span>Discount: </span>
+                <span>-₹{(currentInvoice?.discountAmount || 0).toFixed(2)}</span>
+              </div>
+            )}
             <div className="invoice-totals-row">
               <span>Shipping Charges:</span>
               <span>₹{(currentInvoice?.shippingCharges || 0).toFixed(2)}</span>
