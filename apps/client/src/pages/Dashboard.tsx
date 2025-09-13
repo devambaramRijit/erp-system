@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface DashboardProps {
   user: {
@@ -20,8 +20,29 @@ interface InventoryItem {
   category: string;
 }
 
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  customerName: string;
+  customerEmail: string;
+  billingAddress: string;
+  invoiceType: 'manufactured';
+  items: any[];
+  subtotal: number;
+  discountRate: number;
+  discountAmount: number;
+  advancePayment: number;
+  shippingCharges: number;
+  packingCharges: number;
+  total: number;
+  notes?: string;
+}
+
 export function Dashboard({ user, onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [todaySales, setTodaySales] = useState(0);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([
     {
       id: "1",
@@ -104,6 +125,44 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     }
   };
 
+  useEffect(() => {
+    // Load invoices from localStorage
+    const savedInvoices = localStorage.getItem('invoices');
+    if (savedInvoices) {
+      const parsedInvoices = JSON.parse(savedInvoices);
+      setInvoices(parsedInvoices);
+      
+      // Calculate today's sales
+      const today = new Date().toDateString();
+      const todayInvoices = parsedInvoices.filter((invoice: Invoice) => {
+        const invoiceDate = new Date(invoice.date).toDateString();
+        return invoiceDate === today;
+      });
+      
+      const totalTodaySales = todayInvoices.reduce((sum: number, invoice: Invoice) => {
+        // Calculate total without advance payment
+        const subtotal = invoice.items.reduce((itemSum: number, item: any) => {
+          if (item.productCategory === 'Laddu Gopal Base') {
+            return itemSum + item.total;
+          } else {
+            return itemSum + ((item.rate || 0) * (item.quantity || 0));
+          }
+        }, 0);
+        
+        const discountAmount = invoice.discountType === 'percentage'
+          ? (subtotal * (invoice.discountRate || 0)) / 100
+          : (invoice.discountRate || 0);
+          
+        const subtotalAfterDiscount = subtotal - discountAmount;
+        const total = subtotalAfterDiscount + (invoice.shippingCharges || 0) + (invoice.packingCharges || 0);
+        
+        return sum + total;
+      }, 0);
+      
+      setTodaySales(totalTodaySales);
+    }
+  }, []);
+
   /** Dashboard overview */
   const DashboardView = () => (
     <div>
@@ -116,6 +175,10 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
         <div className="stat-card stat-orange">
           <h3>Total Value</h3>
           <p>₹{totalValue.toFixed(2)}</p>
+        </div>
+        <div className="stat-card stat-green">
+          <h3>Today's Sales</h3>
+          <p>₹{todaySales.toFixed(2)}</p>
         </div>
         <div className="stat-card stat-red">
           <h3>Low Stock Items</h3>
@@ -169,6 +232,10 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
         <div className="stat-card stat-orange">
           <h3>Total Value</h3>
           <p>₹{totalValue.toFixed(2)}</p>
+        </div>
+        <div className="stat-card stat-green">
+          <h3>Today's Sales</h3>
+          <p>₹{todaySales.toFixed(2)}</p>
         </div>
         <div className="stat-card stat-red">
           <h3>Low Stock Items</h3>

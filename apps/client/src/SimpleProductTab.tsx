@@ -280,7 +280,11 @@ const SimpleProductTab: React.FC = () => {
         const isManufactured =
           category === "Laddu Gopal Base" ||
           category === "Laddu Gopal Dress" ||
-          category === "Laddu Gopal Mukut";
+          category === "Laddu Gopal Mukut" ||
+          category === "RK Base" ||
+          category === "Mata Rani Base" ||
+          category === "Ganesh Lakshmi Base" ||
+          category === "Shyam Baba Base";
 
         return {
           id: "prod-" + Date.now() + Math.random(), // unique ID
@@ -446,6 +450,18 @@ const SimpleProductTab: React.FC = () => {
                 <option value="Laddu Gopal Base">Laddu Gopal Base</option>
                 <option value="Laddu Gopal Dress">Laddu Gopal Dress</option>
                 <option value="Laddu Gopal Mukut">Laddu Gopal Mukut</option>
+                <option value="RK Base">RK Base</option>
+                <option value="Mata Rani Base">Mata Rani Base</option>
+                <option value="Ganesh Lakshmi Base">Ganesh Lakshmi Base</option>
+                <option value="Shyam Baba Base">Shyam Baba Base</option>
+                <option value="Fabric">Fabric</option>
+                <option value="Lace">Lace</option>
+                <option value="Booti">Booti</option>
+                <option value="Crystal Painting 16x16">Crystal Painting 16x16</option>
+                <option value="Crystal Painting 12x18">Crystal Painting 12x18</option>
+                <option value="Sparkle Painting 12x18">Sparkle Painting 12x18</option>
+                <option value="Gold Painting 12x18">Gold Painting 12x18</option>
+                <option value="Crystal Painting 10x12">Crystal Painting 10x12</option>
                 <option value="Other">Other</option>
               </select>
             </div>
@@ -466,13 +482,25 @@ const SimpleProductTab: React.FC = () => {
                 name="costPricePerPiece"
                 value={newProduct.costPricePerPiece || ''}
                 onChange={handleInputChange}
-                disabled={newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base'}
+                disabled={newProduct.productType === 'Manufactured' && (
+                  newProduct.productCategory === 'Laddu Gopal Base' ||
+                  newProduct.productCategory === 'RK Base' ||
+                  newProduct.productCategory === 'Mata Rani Base' ||
+                  newProduct.productCategory === 'Ganesh Lakshmi Base' ||
+                  newProduct.productCategory === 'Shyam Baba Base'
+                )}
                 style={{ 
                   width: '100%', 
                   padding: '8px', 
                   border: '1px solid #ddd', 
                   borderRadius: '4px',
-                  backgroundColor: newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base' ? '#f5f5f5' : 'white'
+                  backgroundColor: newProduct.productType === 'Manufactured' && (
+                    newProduct.productCategory === 'Laddu Gopal Base' ||
+                    newProduct.productCategory === 'RK Base' ||
+                    newProduct.productCategory === 'Mata Rani Base' ||
+                    newProduct.productCategory === 'Ganesh Lakshmi Base' ||
+                    newProduct.productCategory === 'Shyam Baba Base'
+                  ) ? '#f5f5f5' : 'white'
                 }}
               />
             </div>
@@ -483,13 +511,25 @@ const SimpleProductTab: React.FC = () => {
                 name="ratePerPiece"
                 value={newProduct.ratePerPiece || ''}
                 onChange={handleInputChange}
-                disabled={newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base'}
+                disabled={newProduct.productType === 'Manufactured' && (
+                  newProduct.productCategory === 'Laddu Gopal Base' ||
+                  newProduct.productCategory === 'RK Base' ||
+                  newProduct.productCategory === 'Mata Rani Base' ||
+                  newProduct.productCategory === 'Ganesh Lakshmi Base' ||
+                  newProduct.productCategory === 'Shyam Baba Base'
+                )}
                 style={{ 
                   width: '100%', 
                   padding: '8px', 
                   border: '1px solid #ddd', 
                   borderRadius: '4px',
-                  backgroundColor: newProduct.productType === 'Manufactured' && newProduct.productCategory === 'Laddu Gopal Base' ? '#f5f5f5' : 'white'
+                  backgroundColor: newProduct.productType === 'Manufactured' && (
+                    newProduct.productCategory === 'Laddu Gopal Base' ||
+                    newProduct.productCategory === 'RK Base' ||
+                    newProduct.productCategory === 'Mata Rani Base' ||
+                    newProduct.productCategory === 'Ganesh Lakshmi Base' ||
+                    newProduct.productCategory === 'Shyam Baba Base'
+                  ) ? '#f5f5f5' : 'white'
                 }}
               />
             </div>
@@ -581,70 +621,72 @@ const SimpleProductTab: React.FC = () => {
         <p style={{ color: 'red' }}>{error}</p>
       ) : (
         <>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', borderRadius: '8px', overflow: 'hidden' }}>
             <thead>
-              <tr style={{ backgroundColor: '#f2f2f2', color: '#000' }}>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('productType')}>
+              <tr style={{ backgroundColor: '#4a5568', color: 'white', fontWeight: 'bold' }}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('productType')}>
                   Product Type {sortConfig?.key === 'productType' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('sku')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('sku')}>
                   SKU {sortConfig?.key === 'sku' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('name')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('name')}>
                   Product Name {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('productCategory')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('productCategory')}>
                   Product Category {sortConfig?.key === 'productCategory' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('quantity')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('quantity')}>
                   Quantity {sortConfig?.key === 'quantity' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('costPricePerPiece')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('costPricePerPiece')}>
                   Cost Price per Piece {sortConfig?.key === 'costPricePerPiece' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('ratePerPiece')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('ratePerPiece')}>
                   Rate per Piece {sortConfig?.key === 'ratePerPiece' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('costPricePerInch')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('costPricePerInch')}>
                   Cost Price per Inch {sortConfig?.key === 'costPricePerInch' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd', cursor: 'pointer' }} onClick={() => requestSort('ratePerInch')}>
+                <th style={{ padding: '12px 15px', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 'bold' }} onClick={() => requestSort('ratePerInch')}>
                   Rate per Inch {sortConfig?.key === 'ratePerInch' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ padding: '12px', border: '1px solid #ddd' }}>Actions</th>
+                <th style={{ padding: '12px 15px', border: 'none', textAlign: 'left', fontWeight: 'bold' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {currentItems.map(product => (
-                <tr key={product.id}>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productType || 'Traded'}</td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.sku}</td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.name}</td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.productCategory}</td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>{product.quantity}</td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                    {product.costPricePerPiece != null ? `$${product.costPricePerPiece.toFixed(2)}` : '-'}
+                <tr key={product.id} style={{ backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', color: '#000' }}>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.productType || 'Traded'}</td>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.sku}</td>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.name}</td>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.productCategory}</td>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.quantity}</td>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>
+                    {product.costPricePerPiece != null ? `₹${product.costPricePerPiece.toFixed(2)}` : '-'}
                   </td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                    {product.ratePerPiece != null ? `$${product.ratePerPiece.toFixed(2)}` : '-'}
+                  <td style={{ padding: '12px 15px', border: 'none' }}>
+                    {product.ratePerPiece != null ? `₹${product.ratePerPiece.toFixed(2)}` : '-'}
                   </td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                    {product.costPricePerInch != null ? `$${product.costPricePerInch.toFixed(2)}` : '-'}
+                  <td style={{ padding: '12px 15px', border: 'none' }}>
+                    {product.costPricePerInch != null ? `₹${product.costPricePerInch.toFixed(2)}` : '-'}
                   </td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>
-                    {product.ratePerInch != null ? `$${product.ratePerInch.toFixed(2)}` : '-'}
+                  <td style={{ padding: '12px 15px', border: 'none' }}>
+                    {product.ratePerInch != null ? `₹${product.ratePerInch.toFixed(2)}` : '-'}
                   </td>
-                  <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>
                     <button
                       onClick={() => handleEditProduct(product)}
                       style={{
-                        padding: '5px 10px',
-                        backgroundColor: '#2196F3',
+                        padding: '6px 12px',
+                        backgroundColor: '#4299e1',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
                         cursor: 'pointer',
-                        marginRight: '5px'
+                        marginRight: '8px',
+                        fontWeight: '500',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                       }}
                     >
                       Edit
@@ -652,12 +694,14 @@ const SimpleProductTab: React.FC = () => {
                     <button
                       onClick={() => handleDeleteProduct(product.id)}
                       style={{
-                        padding: '5px 10px',
-                        backgroundColor: '#f44336',
+                        padding: '6px 12px',
+                        backgroundColor: '#f56565',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                       }}
                     >
                       Delete

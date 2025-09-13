@@ -112,7 +112,7 @@ const InvoiceGenerationScreen: React.FC = () => {
 
     // Get existing invoices for this financial year
     const existingInvoices = invoices.filter(invoice => 
-      invoice.invoiceNumber.startsWith(`INV_${financialYearShort}_`)
+      invoice.invoiceNumber.startsWith('INV_PK_')
     );
 
     // Find the highest sequence number
@@ -128,7 +128,7 @@ const InvoiceGenerationScreen: React.FC = () => {
     // Format with leading zeros
     const sequenceFormatted = nextSequence.toString().padStart(3, '0');
 
-    return `INV_${financialYearShort}_${sequenceFormatted}`;
+    return `INV_PK_${financialYearShort}_${sequenceFormatted}`;
   };
 
   // Load customers from localStorage and set up event listeners
@@ -1014,27 +1014,7 @@ const InvoiceGenerationScreen: React.FC = () => {
                     </Col>
                     <Col>₹{currentInvoice?.discountAmount ? currentInvoice.discountAmount.toFixed(2) : '0.00'}</Col>
                   </Row>
-                  <Row justify="space-between">
-                    <Col>
-                      <Form.Item label="Advance Payment" style={{ marginBottom: 0 }}>
-                        <InputNumber
-                          min={0}
-                          value={currentInvoice?.advancePayment || 0}
-                          onChange={(value) => {
-                            if (currentInvoice) {
-                              const total = currentInvoice.subtotal - currentInvoice.discountAmount - (value || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
-                              setCurrentInvoice({
-                                ...currentInvoice,
-                                advancePayment: value || 0,
-                                total,
-                              });
-                            }
-                          }}
-                        />
-                      </Form.Item>
-                    </Col>
-                    <Col>₹{currentInvoice?.advancePayment ? currentInvoice.advancePayment.toFixed(2) : '0.00'}</Col>
-                  </Row>
+
                   <Row justify="space-between">
                     <Col>
                       <Form.Item label="Shipping Charges" style={{ marginBottom: 0 }}>
@@ -1062,8 +1042,38 @@ const InvoiceGenerationScreen: React.FC = () => {
                   <Divider />
                   <Row justify="space-between">
                     <Col><strong>Total:</strong></Col>
-                    <Col><strong>₹{currentInvoice?.total ? currentInvoice.total.toFixed(2) : '0.00'}</strong></Col>
+                    <Col><strong>₹{currentInvoice ? (currentInvoice.subtotal - currentInvoice.discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges).toFixed(2) : '0.00'}</strong></Col>
                   </Row>
+                  {(currentInvoice?.advancePayment || 0) > 0 && (
+                    <>
+                      <Row justify="space-between">
+                        <Col>
+                          <Form.Item label="Advance Payment" style={{ marginBottom: 0 }}>
+                            <InputNumber
+                              min={0}
+                              value={currentInvoice?.advancePayment || 0}
+                              onChange={(value) => {
+                                if (currentInvoice) {
+                                  const totalWithoutAdvance = currentInvoice.subtotal - currentInvoice.discountAmount + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+                                  setCurrentInvoice({
+                                    ...currentInvoice,
+                                    advancePayment: value || 0,
+                                    total: totalWithoutAdvance - (value || 0),
+                                  });
+                                }
+                              }}
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col>₹{currentInvoice?.advancePayment ? currentInvoice.advancePayment.toFixed(2) : '0.00'}</Col>
+                      </Row>
+                      <Divider style={{ marginTop: 10, marginBottom: 10 }} />
+                      <Row justify="space-between">
+                        <Col><strong>Amount Due:</strong></Col>
+                        <Col><strong>₹{currentInvoice?.total ? currentInvoice.total.toFixed(2) : '0.00'}</strong></Col>
+                      </Row>
+                    </>
+                  )}
                 </div>
               </Col>
             </Row>

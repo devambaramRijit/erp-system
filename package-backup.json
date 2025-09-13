@@ -10,11 +10,14 @@
     "build": "npm run build --workspaces",
     "start": "node apps/server/dist/index.js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev --workspace=apps/client\"",
-    "dev:server": "node apps/server/src/simple-server.js"
+    "dev:server": "node apps/server/src/simple-server.js",
+    "build:electron": "node scripts/build-electron.js"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
+    "electron-builder": "^26.0.12",
+    "electron-builder-squirrel-windows": "^26.0.12",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.13"
   },

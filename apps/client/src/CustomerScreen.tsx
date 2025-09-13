@@ -98,9 +98,37 @@ const CustomerScreen = () => {
       // First try to get customers from localStorage
       const savedCustomers = localStorage.getItem('customers');
       if (savedCustomers) {
-        const parsedCustomers = JSON.parse(savedCustomers);
-        setCustomers(parsedCustomers);
-        setFilteredCustomers(parsedCustomers);
+        let parsedCustomers = JSON.parse(savedCustomers);
+        
+        // Remove duplicate customers based on name and mobile number
+        const uniqueCustomersMap = new Map();
+        const duplicatesRemoved = [];
+        
+        parsedCustomers.forEach(customer => {
+          const key = `${customer.customerName.toLowerCase()}_${customer.mobileNumber1}`;
+          if (!uniqueCustomersMap.has(key)) {
+            uniqueCustomersMap.set(key, customer);
+          } else {
+            duplicatesRemoved.push(customer);
+          }
+        });
+        
+        // Convert map back to array
+        const uniqueCustomers = Array.from(uniqueCustomersMap.values());
+        
+        // If duplicates were found and removed, update localStorage
+        if (duplicatesRemoved.length > 0) {
+          console.log(`Removed ${duplicatesRemoved.length} duplicate customer entries`);
+          localStorage.setItem('customers', JSON.stringify(uniqueCustomers));
+          
+          // Show notification about duplicates removed
+          setTimeout(() => {
+            alert(`Removed ${duplicatesRemoved.length} duplicate customer entries to ensure data integrity.`);
+          }, 500);
+        }
+        
+        setCustomers(uniqueCustomers);
+        setFilteredCustomers(uniqueCustomers);
       } else {
         // No fallback to mock customers
         setCustomers([]);
@@ -147,6 +175,22 @@ const CustomerScreen = () => {
       } else {
         // Add new customer
         console.log('Creating new customer');
+        
+        // Check for duplicate customer
+        const isDuplicate = customers.some(customer => {
+          // Check if customer name and mobile number match
+          return (
+            customer.customerName.toLowerCase() === normalizedData.customerName.toLowerCase() &&
+            customer.mobileNumber1 === normalizedData.mobileNumber1
+          );
+        });
+        
+        if (isDuplicate) {
+          alert('A customer with this name and mobile number already exists!');
+          setIsSaving(false);
+          return;
+        }
+        
         const newCustomer = await mockCustomerApi.createCustomer(normalizedData);
         console.log('Create successful');
         
@@ -415,6 +459,13 @@ const CustomerScreen = () => {
                     value={formData.state}
                     onChange={(value) => handleInputChange({ target: { name: 'state', value } } as any)}
                     placeholder="Select a state"
+                    showSearch
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                    (option?.children as unknown as string)
+                    .toLowerCase()
+                    .includes(input.toLowerCase())
+                    }
                   >
                     <Select.Option value="">Select a state</Select.Option>
       <option value="Andhra Pradesh">Andhra Pradesh</option>

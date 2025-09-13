@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Button, Form, Input, Select, Table, InputNumber, Modal, message, Card, Row, Col, Divider, Space, Popconfirm, AutoComplete } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, SaveOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, SaveOutlined, LockOutlined, CopyOutlined } from '@ant-design/icons';
 import { useReactToPrint } from 'react-to-print';
 import { CustomerData } from './services/mockApi';
 import { api } from './lib/api';
@@ -68,7 +68,7 @@ interface Product {
   price: number;
   productType: string;
   category?: string;
-  costPricePerInch?: number;
+  ratePerPiece?: number;
   ratePerInch?: number;
 }
 
@@ -81,7 +81,7 @@ interface InvoiceItem {
   price: number;
   total: number;
   productCategory?: string;
-  pricePerInch?: number;
+  ratePerInch?: number;
   size?: number;
   cpPerPc?: number;
   rate?: number;
@@ -104,6 +104,10 @@ interface Invoice {
   packingCharges: number;
   total: number;
   notes?: string;
+  notesLine1?: string;
+  notesLine2?: string;
+  notesLine3?: string;
+  isFinalized?: boolean;
 }
 
 const InvoiceScreen: React.FC = () => {
@@ -149,13 +153,26 @@ const InvoiceScreen: React.FC = () => {
 
     // Load invoices from localStorage
     const savedInvoices = localStorage.getItem('invoices');
+    console.log('Raw invoices from localStorage:', savedInvoices);
+    
     if (savedInvoices) {
       try {
         const parsedInvoices = JSON.parse(savedInvoices);
-        setInvoices(parsedInvoices);
+        console.log('Parsed invoices from localStorage:', parsedInvoices);
+        console.log('Number of invoices:', parsedInvoices.length);
+        
+        // Only update state if we have valid invoices
+        if (Array.isArray(parsedInvoices)) {
+          setInvoices(parsedInvoices);
+          console.log('Successfully set invoices in state');
+        } else {
+          console.log('Invalid invoices format in localStorage');
+        }
       } catch (error) {
         console.error('Error parsing saved invoices:', error);
       }
+    } else {
+      console.log('No invoices found in localStorage');
     }
     
     // Load categories from localStorage
@@ -177,10 +194,63 @@ const InvoiceScreen: React.FC = () => {
     }
   }, [currentInvoice]);
 
+  // Update rate for Laddu Gopal Base, RK Base, Mata Rani Base, Ganesh Lakshmi Base and Shyam Baba Base products
+  React.useEffect(() => {
+    if ((selectedProductCategory === 'Laddu Gopal Base' || 
+         selectedProductCategory === 'RK Base' || 
+         selectedProductCategory === 'Mata Rani Base' ||
+         selectedProductCategory === 'Ganesh Lakshmi Base' ||
+         selectedProductCategory === 'Shyam Baba Base') && 
+        currentInvoice?.invoiceType === 'manufactured' && 
+        itemForm) {
+      const ratePerInch = itemForm.getFieldValue('ratePerInch') || 0;
+      const size = itemForm.getFieldValue('size') || 0;
+      const rate = ratePerInch * size;
+      
+      console.log('useEffect updating rate:', { ratePerInch, size, rate });
+      
+      if (rate !== itemForm.getFieldValue('rate')) {
+        itemForm.setFieldsValue({ rate });
+      }
+    }
+  }, [selectedProductCategory, currentInvoice, itemForm, itemForm?.getFieldValue('ratePerInch'), itemForm?.getFieldValue('size')]);
+
   // Save invoices to localStorage whenever they change
   React.useEffect(() => {
-    localStorage.setItem('invoices', JSON.stringify(invoices));
+    try {
+      console.log('Saving invoices to localStorage:', invoices);
+      localStorage.setItem('invoices', JSON.stringify(invoices));
+    } catch (error) {
+      console.error('Error saving invoices to localStorage:', error);
+    }
   }, [invoices]);
+
+  // Initialize invoices from localStorage on component mount
+  React.useEffect(() => {
+    console.log('Component mounted, attempting to load invoices from localStorage');
+    const savedInvoices = localStorage.getItem('invoices');
+    console.log('Raw invoices from localStorage:', savedInvoices);
+    
+    if (savedInvoices) {
+      try {
+        const parsedInvoices = JSON.parse(savedInvoices);
+        console.log('Parsed invoices from localStorage:', parsedInvoices);
+        console.log('Number of invoices:', parsedInvoices.length);
+        
+        // Only update state if we have valid invoices
+        if (Array.isArray(parsedInvoices) && parsedInvoices.length > 0) {
+          setInvoices(parsedInvoices);
+          console.log('Successfully set invoices in state');
+        } else {
+          console.log('No valid invoices found in localStorage');
+        }
+      } catch (error) {
+        console.error('Error initializing invoices from localStorage:', error);
+      }
+    } else {
+      console.log('No invoices found in localStorage');
+    }
+  }, []);
 
   // Sample data
   React.useEffect(() => {
@@ -282,35 +352,9 @@ const InvoiceScreen: React.FC = () => {
 useEffect(() => {
     if (products.length === 0) {
       // No mock products - will remain empty until real products are loaded
-      setProducts([]);
       setProductTypes([]);
     }
-
-    // Load products directly from LocalStorage if available
-    try {
-      const savedProducts = localStorage.getItem('simpleInventoryProducts');
-      if (savedProducts) {
-        const parsedProducts = JSON.parse(savedProducts);
-        // Transform the data to match our Product interface
-        const transformedProducts = parsedProducts.map((item: any) => ({
-          id: item.id,
-          sku: item.sku,
-          name: item.name,
-          size: item.size || 0,
-          unit: item.unit || 'pcs',
-          quantity: item.quantity || 0,
-          price: item.ratePerPiece || 0, // Use ratePerPiece as price
-          productType: item.productType || 'Traded',
-          category: item.productCategory || 'General',
-          costPricePerInch: item.costPricePerInch,
-          ratePerInch: item.ratePerInch
-        }));
-        setProducts(transformedProducts);
-      }
-    } catch (error) {
-      console.error('Error loading products:', error);
-    }
-  }, []);
+  }, [products]);
 
   const handlePrint = useReactToPrint({
     contentRef: invoiceRef,
@@ -323,6 +367,91 @@ useEffect(() => {
       message.error('Failed to print invoice');
     }
   });
+
+  const handlePrintAddress = (invoice: Invoice) => {
+    // Get customer data
+    const customer = customers.find(c => c.customerName === invoice.customerName);
+    
+    // Create a hidden iframe for printing
+    const printIframe = document.createElement('iframe');
+    printIframe.style.position = 'absolute';
+    printIframe.style.left = '-9999px';
+    printIframe.style.top = '-9999px';
+    document.body.appendChild(printIframe);
+    
+    // Create HTML content for the address print
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Address Information</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.5;
+          }
+          .address-container {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+          }
+          .address-section {
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+          }
+          .address-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 16px;
+            padding-bottom: 5px;
+          }
+          .address-details {
+            margin-bottom: 5px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="address-container">
+          <div class="address-section">
+            <div class="address-title"><strong>TO</strong></div>
+            <div class="address-details"><strong> ${invoice.customerName}</strong></div>
+            ${customer ? `
+              <div class="address-details">${customer.houseNumber || ''}, ${customer.city || ''}, ${customer.district || ''}, ${customer.state || ''}</div>
+              ${customer.pinCode ? `<div class="address-details"><strong>PIN:</strong> ${customer.pinCode}</div>` : ''}
+              <div class="address-details"><strong>Mobile:</strong> ${customer.mobileNumber1 || ''} ${customer.mobileNumber2 ? ', ' + customer.mobileNumber2 : ''}</div>
+            ` : '<div class="address-details">No customer details available</div>'}
+          </div>
+          
+          <div class="address-section">
+            <div class="address-title"><strong>FROM</strong></div>
+            <div class="address-details"><strong> Pooja Kreations </strong></div>
+            <div class="address-details">Cinema Hall Road,</div> 
+            <div>Durgapur,</div>
+            <div>West Bengal</div>
+            <div>(near Shiv Mandir)</div>
+            <div class="address-details"><strong>PIN:</strong> 713201</div>
+            <div class="address-details"><strong>Phone:</strong> 9749928722 </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    // Write content to the iframe
+    printIframe.contentDocument?.open();
+    printIframe.contentDocument?.write(printContent);
+    printIframe.contentDocument?.close();
+    
+    // Print directly
+    printIframe.contentWindow?.print();
+    
+    // Clean up after printing
+    setTimeout(() => {
+      document.body.removeChild(printIframe);
+    }, 1000);
+  };
 
   // Handles Adding Invoice to the
   const handleAddInvoice = () => {
@@ -355,25 +484,30 @@ useEffect(() => {
       // Format as YY-YY
       const financialYearShort = `${financialYearStart.toString().slice(-2)}-${financialYearEnd.toString().slice(-2)}`;
 
-      // Get existing invoices for this financial year
+      // Get existing invoices with PK prefix
       const existingInvoices = invoices.filter(invoice =>
-        invoice.invoiceNumber.startsWith(`INV_${financialYearShort}_`)
+        invoice.invoiceNumber.startsWith('INV_PK_')
       );
 
       // Find the highest sequence number
       let nextSequence = 1;
       if (existingInvoices.length > 0) {
         const sequences = existingInvoices.map(invoice => {
-          const parts = invoice.invoiceNumber.split('_');
-          return parseInt(parts[2] || '0', 10);
+          // Use regex to extract the sequence number from the end of the invoice number
+          const match = invoice.invoiceNumber.match(/_(\d+)$/);
+          const sequenceNumber = match ? parseInt(match[1], 10) : 0;
+          console.log(`Extracted sequence ${sequenceNumber} from invoice ${invoice.invoiceNumber}`);
+          return sequenceNumber;
         });
-        nextSequence = Math.max(...sequences) + 1;
+        const maxSequence = Math.max(...sequences);
+        console.log(`Max sequence found: ${maxSequence}, next sequence will be: ${maxSequence + 1}`);
+        nextSequence = maxSequence + 1;
       }
 
       // Format with leading zeros
       const sequenceFormatted = nextSequence.toString().padStart(3, '0');
 
-      return `INV_${financialYearShort}_${sequenceFormatted}`;
+      return `INV_PK_${financialYearShort}_${sequenceFormatted}`;
     };
     
     const newInvoice = {
@@ -399,8 +533,22 @@ useEffect(() => {
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
+    if (invoice.isFinalized) {
+      message.error('This invoice has been finalized and cannot be edited');
+      return;
+    }
+    
+    // Split the notes into separate lines if it exists
+    const notesLines = invoice.notes ? invoice.notes.split('\n') : ['', '', ''];
+    const formValues = {
+      ...invoice,
+      notesLine1: invoice.notesLine1 || notesLines[0] || '',
+      notesLine2: invoice.notesLine2 || notesLines[1] || '',
+      notesLine3: invoice.notesLine3 || notesLines[2] || ''
+    };
+    
     setEditingInvoice(invoice);
-    form.setFieldsValue(invoice);
+    form.setFieldsValue(formValues);
     setCurrentInvoice(invoice);
     
     // Find and set the selected customer based on customer name
@@ -413,8 +561,23 @@ useEffect(() => {
   };
 
   const handleDeleteInvoice = (id: string) => {
-    setInvoices(invoices.filter(invoice => invoice.id !== id));
+    const updatedInvoices = invoices.filter(invoice => invoice.id !== id);
+    setInvoices(updatedInvoices);
+    localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
     message.success('Invoice deleted successfully');
+  };
+
+  const handleFinalizeInvoice = (invoice: Invoice) => {
+    const updatedInvoice = { ...invoice, isFinalized: true };
+    const updatedInvoices = invoices.map(inv => inv.id === invoice.id ? updatedInvoice : inv);
+    setInvoices(updatedInvoices);
+    try {
+      localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+      console.log('Saved finalized invoices to localStorage');
+    } catch (error) {
+      console.error('Error saving finalized invoices to localStorage:', error);
+    }
+    message.success('Invoice finalized successfully');
   };
 
   const handleSaveInvoice = () => {
@@ -422,21 +585,41 @@ useEffect(() => {
       .validateFields()
       .then(values => {
         if (currentInvoice) {
+          // Combine the notes lines into a single notes field
+          const notesLine1 = values.notesLine1 || '';
+          const notesLine2 = values.notesLine2 || '';
+          const notesLine3 = values.notesLine3 || '';
+          const combinedNotes = `${notesLine1}\n${notesLine2}\n${notesLine3}`.trim();
+          
           const updatedInvoice: Invoice = {
             ...currentInvoice,
             ...values,
+            notes: combinedNotes,
+            notesLine1,
+            notesLine2,
+            notesLine3,
             id: editingInvoice ? editingInvoice.id : Date.now().toString(),
           };
 
           if (editingInvoice) {
             const updatedInvoices = invoices.map(invoice => invoice.id === editingInvoice.id ? updatedInvoice : invoice);
             setInvoices(updatedInvoices);
-            localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+            try {
+              localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+              console.log('Saved updated invoices to localStorage');
+            } catch (error) {
+              console.error('Error saving updated invoices to localStorage:', error);
+            }
             message.success('Invoice updated successfully');
           } else {
             const newInvoices = [...invoices, updatedInvoice];
             setInvoices(newInvoices);
-            localStorage.setItem('invoices', JSON.stringify(newInvoices));
+            try {
+              localStorage.setItem('invoices', JSON.stringify(newInvoices));
+              console.log('Saved new invoices to localStorage');
+            } catch (error) {
+              console.error('Error saving new invoices to localStorage:', error);
+            }
             message.success('Invoice added successfully');
           }
 
@@ -456,49 +639,75 @@ useEffect(() => {
   };
 
   const handleProductSelect = (productId: string) => {
+    console.log('Selecting product with ID:', productId);
     const product = products.find(p => p.id === productId );
     if (product) {
+      console.log('Found product:', product);
+      console.log('Product ratePerInch:', product.ratePerInch);
       // Set the product category
       const category = product.category || product.productType;
       itemForm.setFieldsValue({ productCategory: category });
       setSelectedProductCategory(category);
+
+      // Set default values for Laddu Gopal Mukut
+      if (category && category.toLowerCase() === 'laddu gopal mukut') {
+        console.log('Setting default values for Laddu Gopal Mukut');
+        itemForm.setFieldsValue({
+          ratePerInch: 1,
+          size: 1
+        });
+      }
       
-      // If product is Traded and category is Laddu Gopal Dress, lock and set default values
-      if (product.productType === 'Traded' && category === 'Laddu Gopal Dress') {
+      // If product is Traded or Laddu Gopal Mukut, show only rate per piece
+      if (product.productType === 'Traded' || product.name.includes('Laddu Gopal Mukut') || (category && category.toLowerCase() === 'laddu gopal mukut')) {
         // Fetch the Rate per Piece value from the product
         const ratePerPiece = product.price || 0;
         itemForm.setFieldsValue({ 
-          pricePerInch: 1,
-          size: 1,
-          rate: ratePerPiece
+          rate: ratePerPiece,
+          ratePerInch: 1, // Default to 1 for traded products
+          size: 1 // Default to 1 for traded products
         });
         setDisablePriceFields(true);
         setShowRateField(true);
         setDisableRateField(false); // Allow editing rate field
       } 
-      // If product is Manufactured and category is Laddu Gopal Base, show price per inch and size fields
-      else if (product.productType === 'Manufactured' && category === 'Laddu Gopal Base') {
-        // Fetch the Rate per Inch value from the product
+      // If product is Manufactured and category is Laddu Gopal Base, RK Base, Mata Rani Base or Ganesh Lakshmi Base, show price per inch and size fields
+      else if (product.productType === 'Manufactured' && (category === 'Laddu Gopal Base' || category === 'RK Base' || category === 'Mata Rani Base' || category === 'Ganesh Lakshmi Base')) {
+        // Fetch the Cost Price per Inch value from the product
+        const costPricePerInch = product.costPricePerInch || 1;
         const ratePerInch = product.ratePerInch || 1;
         const size = 1;
         // Calculate Rate/Pc as Price Per Inch x Size
-        const calculatedRate = ratePerInch * size;
         itemForm.setFieldsValue({ 
-          pricePerInch: ratePerInch,
+          ratePerInch: ratePerInch,
           size: size,
-          rate: calculatedRate
+          rate: ratePerInch * size
         });
         setDisablePriceFields(false);
-        setShowRateField(false);
-        setDisableRateField(true); // Lock the rate field
+        setShowRateField(true);
+        setDisableRateField(true); // Lock rate field for manufactured products
       }
-      // For all other products, set price per inch and size to 1 and hide them
+      // If product is Manufactured and category is Shyam Baba Base, show price per inch and size fields but keep them unlocked
+      else if (product.productType === 'Manufactured' && category === 'Shyam Baba Base') {
+        // Fetch the Cost Price per Inch value from the product
+        const costPricePerInch = product.costPricePerInch || 1;
+        const ratePerInch = product.ratePerInch || 1;
+        const size = 1;
+        // Calculate Rate/Pc as Price Per Inch x Size
+        itemForm.setFieldsValue({
+          ratePerInch: ratePerInch,
+          size: size,
+          rate: ratePerInch * size
+        });
+        setDisablePriceFields(false);
+        setShowRateField(true);
+        setDisableRateField(false); // Keep rate field unlocked for Shyam Baba Base
+      }
+      // For all other products, set default values
       else {
         // Fetch the Rate per Piece value from the product
         const ratePerPiece = product.price || 0;
         itemForm.setFieldsValue({ 
-          pricePerInch: 1,
-          size: 1,
           rate: ratePerPiece
         });
         setDisablePriceFields(true);
@@ -520,11 +729,13 @@ useEffect(() => {
             let newItem: InvoiceItem;
             
             if (currentInvoice.invoiceType === 'manufactured') {
-              const pricePerInch = values.pricePerInch || 0;
+              const ratePerInch = values.ratePerInch || 0;
               const size = values.size || 0;
-              const cpPerPc = pricePerInch * size;
-              const total = cpPerPc * values.quantity;
-              const rate = values.rate || product.price;
+              // Use the rate value from the form field, which should already be calculated
+              const rate = values.rate || (ratePerInch * size);
+              const cpPerPc = rate;
+              const total = rate * values.quantity;
+              console.log('Saving item:', { ratePerInch, size, rate, cpPerPc, total, formRate: values.rate });
               
               newItem = {
                 id: Date.now().toString(),
@@ -535,13 +746,15 @@ useEffect(() => {
                 price: rate,
                 total: total,
                 productCategory: product.category || '',
-                pricePerInch: pricePerInch,
+                ratePerInch: ratePerInch,
                 size: size,
                 cpPerPc: cpPerPc,
                 rate: rate,
               };
             } else {
-              const rate = values.rate || product.price;
+              const rate = values.rate || product.price || 1; // Default to 1 if both are undefined or 0
+              const ratePerInch = values.ratePerInch || 1; // Default to 1 for traded products
+              const size = values.size || 1; // Default to 1 for traded products
               newItem = {
                 id: Date.now().toString(),
                 productId: values.productId,
@@ -549,13 +762,18 @@ useEffect(() => {
                 unit: values.unit || product.unit || 'pcs',
                 quantity: values.quantity,
                 price: rate,
-                total: rate * values.quantity,
+                total: rate * values.quantity * size * ratePerInch,
                 productCategory: product.category || '',
                 rate: rate,
+                ratePerInch: ratePerInch,
+                size: size,
               };
             }
 
             const updatedItems = [...currentInvoice.items, newItem];
+            console.log('Updated items:', JSON.stringify(updatedItems));
+            console.log('New item:', JSON.stringify(newItem));
+            console.log('New item rate:', newItem.rate);
             const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
             const subtotalAfterAdvance = subtotal - (currentInvoice.advancePayment || 0);
             let discountAmount;
@@ -628,6 +846,7 @@ useEffect(() => {
         // Set form values with current item data
         itemForm.setFieldsValue({
           productId: item.productId,
+          productIdDisplay: item.name,
           productCategory: item.productCategory || product.productType || '',
           quantity: item.quantity,
           ...(currentInvoice.invoiceType === 'manufactured' && {
@@ -661,11 +880,12 @@ useEffect(() => {
               let updatedItem: InvoiceItem;
               
               if (currentInvoice.invoiceType === 'manufactured') {
-                const pricePerInch = values.pricePerInch || 0;
+                const ratePerInch = values.ratePerInch || 0;
                 const size = values.size || 0;
-                const cpPerPc = pricePerInch * size;
-                const total = cpPerPc * values.quantity;
-                const rate = values.rate || product.price;
+                // Use the rate value from the form field, which should already be calculated
+                const rate = values.rate || (ratePerInch * size);
+                const cpPerPc = rate;
+                const total = rate * values.quantity;
                 
                 updatedItem = {
                   ...currentInvoice.items[itemIndex],
@@ -676,13 +896,15 @@ useEffect(() => {
                   price: rate,
                   total: total,
                   productCategory: product.category || '',
-                  pricePerInch: pricePerInch,
+                  ratePerInch: ratePerInch,
                   size: size,
                   cpPerPc: cpPerPc,
                   rate: rate,
                 };
               } else {
                 const rate = values.rate || product.price;
+                const ratePerInch = values.ratePerInch || 1; // Default to 1 for traded products
+                const size = values.size || 1; // Default to 1 for traded products
                 updatedItem = {
                   ...currentInvoice.items[itemIndex],
                   productId: values.productId,
@@ -690,9 +912,11 @@ useEffect(() => {
                   unit: values.unit || product.unit || 'pcs',
                   quantity: values.quantity,
                   price: rate,
-                  total: rate * values.quantity,
+                  total: rate * values.quantity * size * ratePerInch,
                   productCategory: product.category || '',
                   rate: rate,
+                  ratePerInch: ratePerInch,
+                  size: size,
                 };
               }
               
@@ -735,28 +959,30 @@ useEffect(() => {
     if (currentInvoice) {
       let discountAmount;
       
+      // Calculate the correct subtotal
+      const subtotal = currentInvoice.items.reduce((sum, item) => {
+        if (item.productCategory === 'Laddu Gopal Base') {
+          return sum + item.total;
+        } else {
+          return sum + ((item.rate || 0) * (item.quantity || 0));
+        }
+      }, 0);
+      
       if (discountType === 'percentage') {
         // Calculate discount as percentage of subtotal
-        // Calculate the correct subtotal
-        const subtotal = currentInvoice.items.reduce((sum, item) => {
-          if (item.productCategory === 'Laddu Gopal Base') {
-            return sum + item.total;
-          } else {
-            return sum + ((item.rate || 0) * (item.quantity || 0));
-          }
-        }, 0);
         discountAmount = (subtotal * value) / 100;
       } else {
         // Use discount as fixed decimal amount
         discountAmount = value;
       }
       
-      const total = currentInvoice.subtotal - discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+      const total = subtotal - discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
 
       setCurrentInvoice({
         ...currentInvoice,
         discountRate: value,
         discountAmount,
+        subtotal,
         total,
       });
     }
@@ -803,11 +1029,11 @@ useEffect(() => {
   };
 
   const handleProductCategoryChange = (value: string) => {
-    // Disable rate field if product category is Laddu Gopal Base
-    setDisableRateField(value === 'Laddu Gopal Base');
+    // Disable rate field if product category is Laddu Gopal Base, Shyam Baba Base, Mata Rani Base, or Ganesh Lakshmi Base
+    setDisableRateField(value === 'Laddu Gopal Base' || value === 'Shyam Baba Base' || value === 'Mata Rani Base' || value === 'Ganesh Lakshmi Base' || value === 'RK Base');
     
     // If rate field is disabled, clear its value
-    if (value === 'Laddu Gopal Base') {
+    if (value === 'Laddu Gopal Base' || value === 'Shyam Baba Base' || value === 'Mata Rani Base' || value === 'Ganesh Lakshmi Base' || value === 'RK Base') {
       itemForm.setFieldsValue({ rate: 0 });
     }
   };
@@ -878,19 +1104,27 @@ useEffect(() => {
       },
     ];
     
-    // Check if there are any Laddu Gopal Base products in the current invoice
-    const hasLadduGopalBase = currentInvoice?.items.some(item => item.productCategory === 'Laddu Gopal Base');
+    // Check if there are any Laddu Gopal Base, RK Base or Mata Rani Base products in the current invoice
+    const hasSpecialProducts = currentInvoice?.items.some(item => 
+      item.productCategory === 'Laddu Gopal Base' || 
+      item.productCategory === 'RK Base' || 
+      item.productCategory === 'Mata Rani Base'
+    );
 
-    // Only add Price Per Inch and Size columns if there are Laddu Gopal Base products
-    if (hasLadduGopalBase) {
+    // Only add Price Per Inch and Size columns if there are special products
+    if (hasSpecialProducts) {
       // Add Price Per Inch and Size columns with conditional content
-    const pricePerInchColumn = {
-      title: 'Price Per Inch',
-      dataIndex: 'pricePerInch',
-      key: 'pricePerInch',
+    const ratePerInchColumn = {
+      title: 'Rate Per Inch',
+      dataIndex: 'ratePerInch',
+      key: 'ratePerInch',
       render: (price: number, record: InvoiceItem) => {
-        // Only show value for Laddu Gopal Base category
-        if (record.productCategory === 'Laddu Gopal Base') {
+        // Only show value for base categories
+        if (record.productCategory === 'Laddu Gopal Base' || 
+            record.productCategory === 'RK Base' || 
+            record.productCategory === 'Mata Rani Base' ||
+            record.productCategory === 'Ganesh Lakshmi Base' ||
+            record.productCategory === 'Shyam Baba Base') {
           return `₹${price ? price.toFixed(2) : '0.00'}`;
         }
         return ''; // Return empty string for other categories
@@ -902,8 +1136,12 @@ useEffect(() => {
       dataIndex: 'size',
       key: 'size',
       render: (size: number, record: InvoiceItem) => {
-        // Only show value for Laddu Gopal Base category
-        if (record.productCategory === 'Laddu Gopal Base') {
+        // Only show value for base categories
+        if (record.productCategory === 'Laddu Gopal Base' || 
+            record.productCategory === 'RK Base' || 
+            record.productCategory === 'Mata Rani Base' ||
+            record.productCategory === 'Ganesh Lakshmi Base' ||
+            record.productCategory === 'Shyam Baba Base') {
           return size;
         }
         return ''; // Return empty string for other categories
@@ -911,7 +1149,7 @@ useEffect(() => {
     };
     
       // Add conditional columns
-      columns.push(pricePerInchColumn);
+      columns.push(ratePerInchColumn);
       columns.push(sizeColumn);
     }
     
@@ -922,8 +1160,12 @@ useEffect(() => {
         dataIndex: 'rate',
         key: 'rate',
         render: (rate: number, record: InvoiceItem) => {
-          // For Laddu Gopal Base products, calculate rate as pricePerInch * size
-          if (record.productCategory === 'Laddu Gopal Base') {
+          // For base products, calculate rate as pricePerInch * size
+          if (record.productCategory === 'Laddu Gopal Base' || 
+              record.productCategory === 'RK Base' || 
+              record.productCategory === 'Mata Rani Base' ||
+              record.productCategory === 'Ganesh Lakshmi Base' ||
+              record.productCategory === 'Shyam Baba Base') {
             const calculated = (record.pricePerInch || 0) * (record.size || 0);
             return `₹${calculated.toFixed(2)}`;
           }
@@ -947,8 +1189,12 @@ useEffect(() => {
         dataIndex: 'total',
         key: 'total',
         render: (total: number, record: InvoiceItem) => {
-          // For Laddu Gopal Base products, calculate total as (pricePerInch * size) * quantity
-          if (record.productCategory === 'Laddu Gopal Base') {
+          // For base products, calculate total as (pricePerInch * size) * quantity
+          if (record.productCategory === 'Laddu Gopal Base' || 
+              record.productCategory === 'RK Base' || 
+              record.productCategory === 'Mata Rani Base' ||
+              record.productCategory === 'Ganesh Lakshmi Base' ||
+              record.productCategory === 'Shyam Baba Base') {
             const cpPerPc = (record.pricePerInch || 0) * (record.size || 0);
             const calculated = cpPerPc * (record.quantity || 0);
             return `₹${calculated.toFixed(2)}`;
@@ -978,19 +1224,27 @@ useEffect(() => {
       },
     ];
 
-    // Check if there are any Laddu Gopal Base products in the current invoice
-    const hasLadduGopalBase = currentInvoice?.items.some(item => item.productCategory === 'Laddu Gopal Base');
+    // Check if there are any base products in the current invoice
+    const hasSpecialProducts = currentInvoice?.items.some(item => 
+      item.productCategory === 'Laddu Gopal Base' || 
+      item.productCategory === 'RK Base' || 
+      item.productCategory === 'Mata Rani Base'
+    );
 
-    // Only add Size column if there are Laddu Gopal Base products
-    if (hasLadduGopalBase) {
+    // Only add Size column if there are special products
+    if (hasSpecialProducts) {
       // Add Size column with conditional content
       const sizeColumn = {
         title: 'Size',
         dataIndex: 'size',
         key: 'size',
         render: (size: number, record: InvoiceItem) => {
-          // Only show value for Laddu Gopal Base category
-          if (record.productCategory === 'Laddu Gopal Base') {
+          // Only show value for base categories
+          if (record.productCategory === 'Laddu Gopal Base' || 
+              record.productCategory === 'RK Base' || 
+              record.productCategory === 'Mata Rani Base' ||
+              record.productCategory === 'Ganesh Lakshmi Base' ||
+              record.productCategory === 'Shyam Baba Base') {
             return size;
           }
           return ''; // Return empty string for other categories
@@ -1173,13 +1427,12 @@ useEffect(() => {
             return sum + ((item.rate || 0) * (item.quantity || 0));
           }
         }, 0);
-        const subtotalAfterAdvance = subtotal - (record.advancePayment || 0);
+
         const discountAmount = record.discountType === 'percentage' 
           ? (subtotal * (record.discountRate || 0)) / 100
           : (record.discountRate || 0);
         const subtotalAfterDiscount = subtotal - discountAmount;
-        const subtotalAfterAdvanceFinal = subtotalAfterDiscount - (record.advancePayment || 0);
-        const calculatedTotal = subtotalAfterAdvanceFinal + (record.shippingCharges || 0) + (record.packingCharges || 0);
+        const calculatedTotal = subtotalAfterDiscount + (record.shippingCharges || 0) + (record.packingCharges || 0);
         return `₹${calculatedTotal.toFixed(2)}`;
       },
     },
@@ -1188,14 +1441,16 @@ useEffect(() => {
       key: 'action',
       render: (text: string, record: Invoice) => (
         <Space>
-          <Button
-            type="primary"
-            icon={<EditOutlined />}
-            size="small"
-            onClick={() => handleEditInvoice(record)}
-          >
-            Edit
-          </Button>
+          {!record.isFinalized && (
+            <Button
+              type="primary"
+              icon={<EditOutlined />}
+              size="small"
+              onClick={() => handleEditInvoice(record)}
+            >
+              Edit
+            </Button>
+          )}
           <Popconfirm
             title="Are you sure to delete this invoice?"
             onConfirm={() => handleDeleteInvoice(record.id)}
@@ -1206,6 +1461,24 @@ useEffect(() => {
               Delete
             </Button>
           </Popconfirm>
+          {!record.isFinalized && (
+            <Button
+              type="default"
+              icon={<LockOutlined />}
+              size="small"
+              onClick={() => handleFinalizeInvoice(record)}
+            >
+              Finalize
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: 'Print',
+      key: 'print',
+      render: (text: string, record: Invoice) => (
+        <Space>
           <Button
             type="default"
             icon={<PrinterOutlined />}
@@ -1223,6 +1496,16 @@ useEffect(() => {
           >
             Print
           </Button>
+          <Button
+            type="default"
+            icon={<PrinterOutlined />}
+            size="small"
+            onClick={() => {
+              handlePrintAddress(record);
+            }}
+          >
+            Print Address
+          </Button>
         </Space>
       ),
     },
@@ -1232,7 +1515,7 @@ useEffect(() => {
     <div className="invoice-screen">
       <Card>
         <div className="invoice-header">
-          <h2>Invoice Management</h2>
+          <h2 style={{ color: "black", fontWeight: "bold" }}>Invoice Management</h2>
           <Space>
             <Button icon={<EditOutlined />} onClick={refreshData}>
               Refresh Data
@@ -1447,13 +1730,111 @@ useEffect(() => {
           <Divider />
 
           <div className="invoice-items-header">
-            <h3>Invoice Items</h3>
+            <h3 style={{ color: "black", fontWeight: "bold" }}>Invoice Items</h3>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleAddItem}>
               Add Item
             </Button>
           </div>
 
-          <Table dataSource={currentInvoice?.items || []} columns={itemColumns} rowKey="id" pagination={false} />
+          {/* Table hidden - only showing Added Items Summary Table */}
+          {/* <Table dataSource={currentInvoice?.items || []} columns={itemColumns} rowKey="id" pagination={false} /> */}
+          
+          {/* Added Items Summary Table */}
+          <div style={{ marginTop: 20 }}>
+            <h4 style={{ color: "black", fontWeight: "bold" }}>Items Summary</h4>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Product Name</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Product Type</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Rate Per Inch</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Size</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Rate per Piece</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Quantity</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Unit</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Total</th>
+                  <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentInvoice?.items.map((item) => (
+                  <tr key={item.id}>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.name}</td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.productCategory || ''}</td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      {(item.productCategory === 'Laddu Gopal Base' || item.productCategory === 'RK Base' || item.productCategory === 'Shyam Baba Base' || item.productCategory === 'Mata Rani Base' || item.productCategory === 'Ganesh Lakshmi Base') ? `₹${(item.ratePerInch || 1).toFixed(2)}` : ''}
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      {(item.productCategory === 'Laddu Gopal Base' || item.productCategory === 'RK Base' || item.productCategory === 'Shyam Baba Base' || item.productCategory === 'Mata Rani Base' || item.productCategory === 'Ganesh Lakshmi Base') ? (item.size || 1) : ''}
+                    </td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>₹{(item.rate || item.price || 0).toFixed(2)}</td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.quantity}</td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.unit || 'pcs'}</td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>₹{item.total.toFixed(2)}</td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                      <Button 
+                        size="small" 
+                        type="primary" 
+                        style={{ marginRight: '5px' }}
+                        onClick={() => {
+                          itemForm.setFieldsValue({
+                            editingItemId: item.id,
+                            productIdDisplay: item.name,
+                            productId: item.productId,
+                            productCategory: item.productCategory,
+                            rate: item.rate || item.price,
+                            ratePerInch: item.ratePerInch,
+                            size: item.size,
+                            quantity: item.quantity,
+                            unit: item.unit
+                          });
+                          setSelectedProductCategory(item.productCategory);
+                          setItemVisible(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button 
+                        size="small" 
+                        type="default"
+                        icon={<CopyOutlined />}
+                        style={{ marginRight: '5px' }}
+                        onClick={() => {
+                          if (currentInvoice) {
+                            const newItem = {
+                              ...item,
+                              id: Date.now().toString(), // Generate new ID
+                              name: `${item.name} (Copy)`
+                            };
+                            const updatedInvoice = {
+                              ...currentInvoice,
+                              items: [...currentInvoice.items, newItem]
+                            };
+                            setCurrentInvoice(updatedInvoice);
+                            form.setFieldsValue(updatedInvoice);
+                            message.success('Item duplicated successfully');
+                          }
+                        }}
+                      >
+                        Duplicate
+                      </Button>
+                      <Button 
+                        size="small" 
+                        danger
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to delete this item?')) {
+                            handleDeleteItem(item.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <Row gutter={16} style={{ marginTop: 16 }}>
             <Col span={6}>
@@ -1526,8 +1907,24 @@ useEffect(() => {
 
           <Row gutter={16}>
             <Col span={24}>
-              <Form.Item name="notes" label="Notes">
-                <TextArea rows={3} />
+              <Form.Item label="Notes">
+                <Row gutter={8}>
+                  <Col span={24}>
+                    <Form.Item name="notesLine1" noStyle>
+                      <Input placeholder="Line 1" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={24}>
+                    <Form.Item name="notesLine2" noStyle>
+                      <Input placeholder="Line 2" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={24}>
+                    <Form.Item name="notesLine3" noStyle>
+                      <Input placeholder="Line 3" />
+                    </Form.Item>
+                  </Col>
+                </Row>
               </Form.Item>
             </Col>
           </Row>
@@ -1550,18 +1947,7 @@ useEffect(() => {
                 </div>
               </Col>
             </Row>
-            {(currentInvoice?.advancePayment || 0) > 0 && (
-              <Row style={{ marginTop: 8 }}>
-                <Col span={18}>
-                  <div style={{ textAlign: 'right', color: '#333' }}>Advance Payment:</div>
-                </Col>
-                <Col span={6}>
-                  <div style={{ textAlign: 'right', color: '#333' }}>
-                    -₹{(currentInvoice?.advancePayment || 0).toFixed(2)}
-                  </div>
-                </Col>
-              </Row>
-            )}
+
             {(currentInvoice?.discountAmount || 0) > 0 && (
               <Row style={{ marginTop: 8 }}>
                 <Col span={18}>
@@ -1610,13 +1996,49 @@ useEffect(() => {
                     }, 0) || 0;
                     const discountAmount = currentInvoice?.discountAmount || 0;
                     const subtotalAfterDiscount = subtotal - discountAmount;
-                    const subtotalAfterAdvance = subtotalAfterDiscount - (currentInvoice?.advancePayment || 0);
-                    const total = subtotalAfterAdvance + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
+                    const total = subtotalAfterDiscount + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
                     return total.toFixed(2);
                   })()}
                 </div>
               </Col>
             </Row>
+            {(currentInvoice?.advancePayment || 0) > 0 && (
+              <>
+                <Row style={{ marginTop: 8 }}>
+                  <Col span={18}>
+                    <div style={{ textAlign: 'right', color: '#333' }}>Advance Payment:</div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'right', color: '#333' }}>
+                      -₹{(currentInvoice?.advancePayment || 0).toFixed(2)}
+                    </div>
+                  </Col>
+                </Row>
+                <Row style={{ marginTop: 16, borderTop: '1px solid #d9d9d9', paddingTop: 16 }}>
+                  <Col span={18}>
+                    <div style={{ textAlign: 'right', fontSize: '16px', fontWeight: 'bold', color: '#333' }}>Amount Due:</div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'right', fontSize: '16px', fontWeight: 'bold', color: '#f5222d' }}>
+                      ₹{(() => {
+                        const subtotal = currentInvoice?.items.reduce((sum, item) => {
+                          if (item.productCategory === 'Laddu Gopal Base') {
+                            return sum + item.total;
+                          } else {
+                            return sum + ((item.rate || 0) * (item.quantity || 0));
+                          }
+                        }, 0) || 0;
+                        const discountAmount = currentInvoice?.discountAmount || 0;
+                        const subtotalAfterDiscount = subtotal - discountAmount;
+                        const total = subtotalAfterDiscount + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
+                        const amountDue = total - (currentInvoice?.advancePayment || 0);
+                        return amountDue.toFixed(2);
+                      })()}
+                    </div>
+                  </Col>
+                </Row>
+              </>
+            )}
           </div>
         </Form>
       </Modal>
@@ -1627,7 +2049,41 @@ useEffect(() => {
         onOk={itemForm.getFieldValue('editingItemId') ? handleUpdateItem : handleSaveItem}
         onCancel={() => setItemVisible(false)}
       >
-        <Form form={itemForm} layout="vertical">
+        <Form 
+          form={itemForm} 
+          layout="vertical"
+          onValuesChange={(changedValues, allValues) => {
+            // Debug: Log all changes
+            console.log('Form values changed:', changedValues);
+            console.log('All form values:', allValues);
+            console.log('Selected product category:', selectedProductCategory);
+            console.log('Invoice type:', currentInvoice?.invoiceType);
+            
+            // If it's a manufactured invoice with special categories and ratePerInch or size changes, calculate the rate
+            if (currentInvoice?.invoiceType === 'manufactured' && 
+                (selectedProductCategory === 'Laddu Gopal Base' || selectedProductCategory === 'RK Base' || selectedProductCategory === 'Mata Rani Base' || selectedProductCategory === 'Shyam Baba Base' || selectedProductCategory === 'Ganesh Lakshmi Base') && 
+                (changedValues.ratePerInch || changedValues.size)) {
+              const ratePerInch = allValues.ratePerInch || 1; // Default to 1 instead of 0
+              const size = allValues.size || 1; // Default to 1 instead of 0
+              const rate = ratePerInch * size;
+              
+              console.log('Calculating rate:', { ratePerInch, size, rate });
+              
+              // Always update the rate field
+              itemForm.setFieldsValue({ rate });
+              console.log('Updated rate field to:', rate);
+            }
+            
+            // For traded products or laddu gopal mukut, ensure rate doesn't change when quantity changes
+            if ((currentInvoice?.invoiceType !== 'manufactured' || selectedProductCategory === 'laddu gopal mukut') && changedValues.quantity) {
+              // Always preserve the current rate value, don't let it change
+              if (allValues.rate !== undefined) {
+                // Keep the current rate, don't recalculate
+                itemForm.setFieldsValue({ rate: allValues.rate });
+              }
+            }
+          }}
+        >
           <Form.Item
             name="editingItemId"
             hidden={true}
@@ -1700,15 +2156,9 @@ useEffect(() => {
                   </Select.Option>
                 ))}
               </Select>
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />} 
-              onClick={() => {
-                // Open the product form in a modal
-                setShowProductForm(true);
-              }}
-              title="Add New Product"
-            />
+
+
+            {/* Add New Product button hidden */}
             </div>
           </Form.Item>
           
@@ -1719,9 +2169,11 @@ useEffect(() => {
             <Input type="hidden" />
           </Form.Item>
 
+
+          {(showRateField || (currentInvoice?.invoiceType === 'manufactured' && (selectedProductCategory === 'Laddu Gopal Base' || selectedProductCategory === 'Ganesh Lakshmi Base'))) && (
           <Form.Item
             name="rate"
-            label="Rate (Price Per Piece)"
+            label="Rate Per Piece"
           >
             <InputNumber 
               min={0} 
@@ -1733,23 +2185,31 @@ useEffect(() => {
               disabled={disableRateField}
             />
           </Form.Item>
+          )}
           
           {currentInvoice?.invoiceType === 'manufactured' ? (
             <>
-              <Form.Item
-                name="pricePerInch"
-                label="Price Per Inch"
-                rules={[{ required: true, message: 'Please input price per inch!' }]}
-              >
-                <InputNumber min={0} step={0.01} style={{ width: '100%' }} disabled={disablePriceFields} />
-              </Form.Item>
+          <Form.Item
+            name="ratePerInch"
+            label="Rate Per Inch"
+          >
+            <InputNumber 
+              min={0} 
+              step={0.01} 
+              style={{ width: '100%' }} 
+              formatter={value => `₹ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={value => value!.replace(/₹\s?|(,*)/g, '') as unknown as number}
+              placeholder="Enter rate per inch"
+              disabled={!(currentInvoice?.invoiceType === 'manufactured' && (selectedProductCategory === 'Laddu Gopal Base' || selectedProductCategory === 'RK Base' || selectedProductCategory === 'Shyam Baba Base' || selectedProductCategory === 'Mata Rani Base' || selectedProductCategory === 'Ganesh Lakshmi Base'))}
+            />
+          </Form.Item>
               
               <Form.Item
                 name="size"
                 label="Size"
-                rules={[{ required: true, message: 'Please input size!' }]}
+                rules={currentInvoice?.invoiceType === 'manufactured' && selectedProductCategory !== 'laddu gopal mukut' ? [{ required: true, message: 'Please input size!' }] : []}
               >
-                <InputNumber min={0} step={0.01} style={{ width: '100%' }} disabled={disablePriceFields} />
+                <InputNumber min={0} step={0.01} style={{ width: '100%' }} disabled={!(currentInvoice?.invoiceType === 'manufactured' && (selectedProductCategory === 'Laddu Gopal Base' || selectedProductCategory === 'RK Base' || selectedProductCategory === 'Shyam Baba Base' || selectedProductCategory === 'Mata Rani Base' || selectedProductCategory === 'Ganesh Lakshmi Base'))} value={1} />
               </Form.Item>
             </>
           ) : null}
@@ -1796,8 +2256,7 @@ useEffect(() => {
         <div className="invoice-container">
           <div className="invoice-header">
             <div>
-              <div className="invoice-title">INVOICE</div>
-              <div>ErpSoul System</div>
+              <img src="/pk-logo.png" alt="Company Logo" style={{ marginTop: "10px", maxWidth: "400px" }} />
             </div>
             <div>
               <div><strong>Invoice #:</strong> {currentInvoice?.invoiceNumber}</div>
@@ -1822,8 +2281,14 @@ useEffect(() => {
                 <h3>Customer Address:</h3>
                 <div>{currentInvoice?.billingAddress}</div>
               </div>
-              <div className="invoice-info">
-                {/* Empty div to maintain layout */}
+              <div className="invoice-sender">
+                <h3>Seller Name:</h3>
+                <div><strong>Pooja Kreations</strong></div>
+                <div>Phone: 9749928722</div>
+                <h3>Seller Address:</h3>
+                <div>Cinema Hall Road, Durgapur</div>
+                <div>West Bengal, PIN - 713201</div>
+                <div>(near Shiv Mandir)</div>
               </div>
             </div>
           </div>
@@ -1832,15 +2297,21 @@ useEffect(() => {
             <thead>
               {(() => {
                 // Check if there are any Laddu Gopal Base products in the current invoice
-                const hasLadduGopalBase = currentInvoice?.items.some(item => item.productCategory === 'Laddu Gopal Base');
+                const hasBaseProducts = currentInvoice?.items.some(item => 
+                  item.productCategory === 'Laddu Gopal Base' || 
+                  item.productCategory === 'RK Base' || 
+                  item.productCategory === 'Mata Rani Base' ||
+                  item.productCategory === 'Ganesh Lakshmi Base' ||
+                  item.productCategory === 'Shyam Baba Base'
+                );
                 
                 if (currentInvoice?.invoiceType === 'manufactured') {
-                  if (hasLadduGopalBase) {
+                  if (hasBaseProducts) {
                     return (
                       <tr>
                         <th>Product Name</th>
-                        {hasLadduGopalBase && <th>Price Per Inch</th>}
-                        {hasLadduGopalBase && <th>Size</th>}
+                        {hasBaseProducts && <th>Price Per Inch</th>}
+                        {hasBaseProducts && <th>Size</th>}
                         <th>Rate /Pc</th>
                         <th>Quantity</th>
                         <th>Unit</th>
@@ -1874,20 +2345,32 @@ useEffect(() => {
             <tbody>
               {(() => {
                 // Check if there are any Laddu Gopal Base products in the current invoice
-                const hasLadduGopalBase = currentInvoice?.items.some(item => item.productCategory === 'Laddu Gopal Base');
+                const hasBaseProducts = currentInvoice?.items.some(item => 
+                  item.productCategory === 'Laddu Gopal Base' || 
+                  item.productCategory === 'RK Base' || 
+                  item.productCategory === 'Mata Rani Base' ||
+                  item.productCategory === 'Ganesh Lakshmi Base' ||
+                  item.productCategory === 'Shyam Baba Base'
+                );
+                console.log('Table body hasBaseProducts:', hasBaseProducts);
+                console.log('Table body currentInvoice.items:', currentInvoice?.items);
                 
                 return currentInvoice?.items.map((item) => {
                   if (currentInvoice?.invoiceType === 'manufactured') {
-                    if (hasLadduGopalBase) {
+                    if (hasBaseProducts) {
+                      console.log('Rendering table row for manufactured item with Laddu Gopal Base:', item);
                       return (
                         <tr key={item.id}>
                           <td>{item.name}</td>
-                          {hasLadduGopalBase && <td>{item.productCategory === 'Laddu Gopal Base' && currentInvoice?.invoiceType === 'manufactured' ? `₹${(item.pricePerInch || 0).toFixed(2)}` : ''}</td>}
-                          {hasLadduGopalBase && <td>{item.productCategory === 'Laddu Gopal Base' ? item.size : ''}</td>}
-                          <td>₹{item.productCategory === 'Laddu Gopal Base' ? ((item.pricePerInch || 0) * (item.size || 0)).toFixed(2) : (item.rate || 0).toFixed(2)}</td>
+                          {hasBaseProducts && <td>{(item.productCategory === 'Laddu Gopal Base' || item.productCategory === 'RK Base' || item.productCategory === 'Mata Rani Base' || item.productCategory === 'Ganesh Lakshmi Base' || item.productCategory === 'Shyam Baba Base') && currentInvoice?.invoiceType === 'manufactured' ? `₹${(item.ratePerInch || 0).toFixed(2)}` : ''}</td>}
+                          {hasBaseProducts && <td>{(item.productCategory === 'Laddu Gopal Base' || item.productCategory === 'RK Base' || item.productCategory === 'Mata Rani Base' || item.productCategory === 'Ganesh Lakshmi Base' || item.productCategory === 'Shyam Baba Base') ? item.size : ''}</td>}
+                          <td>{(function() {
+                             console.log('Rendering rate cell with value:', item.rate, 'for item:', item.name);
+                             return `₹${(item.rate || 0).toFixed(2)}`;
+                           })()}</td>
                           <td>{item.quantity}</td>
                           <td>{item.unit || 'pcs'}</td>
-                          <td>₹{item.productCategory === 'Laddu Gopal Base' ? item.total.toFixed(2) : ((item.rate || 0) * (item.quantity || 0)).toFixed(2)}</td>
+                          <td>₹{item.total.toFixed(2)}</td>
                         </tr>
                       );
                     } else {
@@ -1896,8 +2379,8 @@ useEffect(() => {
                           <td>{item.name}</td>
                           <td>{item.quantity}</td>
                           <td>{item.unit || 'pcs'}</td>
-                          <td>₹{item.price.toFixed(2)}</td>
-                          <td>₹{item.productCategory === 'Laddu Gopal Base' ? item.total.toFixed(2) : ((item.rate || 0) * (item.quantity || 0)).toFixed(2)}</td>
+                          <td>₹{(item.rate || item.price || 0).toFixed(2)}</td>
+                          <td>₹{item.total.toFixed(2)}</td>
                         </tr>
                       );
                     }
@@ -1907,8 +2390,8 @@ useEffect(() => {
                         <td>{item.name}</td>
                         <td>{item.quantity}</td>
                         <td>{item.unit || 'pcs'}</td>
-                        <td>₹{item.price.toFixed(2)}</td>
-                        <td>₹{item.productCategory === 'Laddu Gopal Base' ? item.total.toFixed(2) : ((item.rate || 0) * (item.quantity || 0)).toFixed(2)}</td>
+                        <td>₹{(item.rate || item.price || 0).toFixed(2)}</td>
+                        <td>₹{item.total.toFixed(2)}</td>
                       </tr>
                     );
                   }
@@ -1917,23 +2400,49 @@ useEffect(() => {
             </tbody>
           </table>
 
-          <div className="invoice-totals">
-            <div className="invoice-totals-row">
-              <span>Subtotal:</span>
+          <div className="invoice-summary">
+            <div className="invoice-notes-section">
+              {(currentInvoice?.notesLine1 || currentInvoice?.notesLine2 || currentInvoice?.notesLine3) && (
+                <div className="invoice-notes">
+                  <div className="invoice-notes-row">
+                    <p>Notes:</p>
+                  </div>
+                  <div className="invoice-notes-row" style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>
+                    <p style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>{currentInvoice?.notesLine1 || ''}</p>
+                  </div>
+                  <div className="invoice-notes-row" style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>
+                    <p style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>{currentInvoice?.notesLine2 || ''}</p>
+                  </div>
+                  <div className="invoice-notes-row" style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>
+                    <p style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>{currentInvoice?.notesLine3 || ''}</p>
+                  </div>
+                </div>
+              )}
+                        <div className="invoice-terms">
+            <h3>Terms and Conditions:</h3>
+            <p>1. Open box video is mandatory for any claim or dispute. </p>
+            <p>2. Any claim or dispute arising from change in quality, shortage in quantity, or any cause whatsoever will not be entertained once the goods are delivered, if open box video, made at the time of delivery, is not provided.</p>
+            <p>3. Payment for this invoice is due within 24 hours of the billing date.</p>
+            <p>4. Late payment charges at 24% p.a. will be charged on amount of the bill after due date.</p>
+            <p>5. We are not responsible for any loss or damage during transit. </p>
+            <p>6. Subject to DURGAPUR jurisdiction only.</p>
+          </div>
+            </div>
+            <div className="invoice-totals">
+              <div className="invoice-totals-row">
+                <span>Subtotal:</span>
               <span>₹{(currentInvoice?.items.reduce((sum, item) => {
-                if (item.productCategory === 'Laddu Gopal Base') {
+                if (item.productCategory === 'Laddu Gopal Base' || 
+                    item.productCategory === 'RK Base' || 
+                    item.productCategory === 'Mata Rani Base' ||
+                    item.productCategory === 'Ganesh Lakshmi Base' ||
+                    item.productCategory === 'Shyam Baba Base') {
                   return sum + item.total;
                 } else {
                   return sum + ((item.rate || 0) * (item.quantity || 0));
                 }
               }, 0) || 0).toFixed(2)}</span>
             </div>
-            {(currentInvoice?.advancePayment || 0) > 0 && (
-              <div className="invoice-totals-row">
-                <span>Advance Payment:</span>
-                <span>-₹{(currentInvoice?.advancePayment || 0).toFixed(2)}</span>
-              </div>
-            )}
             {(currentInvoice?.discountAmount || 0) > 0 && (
               <div className="invoice-totals-row">
                 <span>Discount: </span>
@@ -1952,7 +2461,11 @@ useEffect(() => {
               <span>Total:</span>
               <span>₹{(() => {
                 const subtotal = currentInvoice?.items.reduce((sum, item) => {
-                  if (item.productCategory === 'Laddu Gopal Base') {
+                  if (item.productCategory === 'Laddu Gopal Base' || 
+                      item.productCategory === 'RK Base' || 
+                      item.productCategory === 'Mata Rani Base' ||
+                      item.productCategory === 'Ganesh Lakshmi Base' ||
+                      item.productCategory === 'Shyam Baba Base') {
                     return sum + item.total;
                   } else {
                     return sum + ((item.rate || 0) * (item.quantity || 0));
@@ -1962,19 +2475,42 @@ useEffect(() => {
                 const discountAmount = currentInvoice?.discountAmount || 0; 
 
                 const subtotalAfterDiscount = subtotal - discountAmount;
-                const subtotalAfterAdvance = subtotalAfterDiscount - (currentInvoice?.advancePayment || 0);
-                const total = subtotalAfterAdvance + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
+                const total = subtotalAfterDiscount + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
                 return total.toFixed(2);
               })()}</span>
             </div>
+            {(currentInvoice?.advancePayment || 0) > 0 && (
+              <>
+                <div className="invoice-totals-row">
+                  <span>Advance Payment:</span>
+                  <span>-₹{(currentInvoice?.advancePayment || 0).toFixed(2)}</span>
+                </div>
+                <div className="invoice-totals-row total" style={{ borderTop: '2px solid #000', paddingTop: '10px', marginTop: '10px' }}>
+                  <span>Amount Due:</span>
+                  <span>₹{(() => {
+                    const subtotal = currentInvoice?.items.reduce((sum, item) => {
+                      if (item.productCategory === 'Laddu Gopal Base') {
+                        return sum + item.total;
+                      } else {
+                        return sum + ((item.rate || 0) * (item.quantity || 0));
+                      }
+                    }, 0) || 0;
+
+                    const discountAmount = currentInvoice?.discountAmount || 0; 
+                    const subtotalAfterDiscount = subtotal - discountAmount;
+                    const total = subtotalAfterDiscount + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
+                    const amountDue = total - (currentInvoice?.advancePayment || 0);
+                    return amountDue.toFixed(2);
+                  })()}</span>
+                </div>
+              </>
+            )}
           </div>
 
-          {currentInvoice?.notes && (
-            <div className="invoice-notes">
-              <h3>Notes:</h3>
-              <p>{currentInvoice.notes}</p>
-            </div>
-          )}
+          </div>
+          <div className="invoice-terms">
+            <p style={{ fontSize: '16px', fontWeight: 'bold' }}> Powered By Devambaram Industries Private Limited. </p>
+          </div>
         </div>
       </div>
 
@@ -2103,6 +2639,43 @@ useEffect(() => {
                   placeholder="Select or type a state"
                   mode="combobox"
                 >
+                                      <Select.Option value="">Select a state</Select.Option>
+                        <option value="Andhra Pradesh">Andhra Pradesh</option>
+                        <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                        <option value="Assam">Assam</option>
+                        <option value="Bihar">Bihar</option>
+                        <option value="Chhattisgarh">Chhattisgarh</option>
+                        <option value="Goa">Goa</option>
+                        <option value="Gujarat">Gujarat</option>
+                        <option value="Haryana">Haryana</option>
+                        <option value="Himachal Pradesh">Himachal Pradesh</option>
+                        <option value="Jharkhand">Jharkhand</option>
+                        <option value="Karnataka">Karnataka</option>
+                        <option value="Kerala">Kerala</option>
+                        <option value="Madhya Pradesh">Madhya Pradesh</option>
+                        <option value="Maharashtra">Maharashtra</option>
+                        <option value="Manipur">Manipur</option>
+                        <option value="Meghalaya">Meghalaya</option>
+                        <option value="Mizoram">Mizoram</option>
+                        <option value="Nagaland">Nagaland</option>
+                        <option value="Odisha">Odisha</option>
+                        <option value="Punjab">Punjab</option>
+                        <option value="Rajasthan">Rajasthan</option>
+                        <option value="Sikkim">Sikkim</option>
+                        <option value="Tamil Nadu">Tamil Nadu</option>
+                        <option value="Telangana">Telangana</option>
+                        <option value="Tripura">Tripura</option>
+                        <option value="Uttar Pradesh">Uttar Pradesh</option>
+                        <option value="Uttarakhand">Uttarakhand</option>
+                        <option value="West Bengal">West Bengal</option>
+                              <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
+                        <option value="Chandigarh">Chandigarh</option>
+                        <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
+                        <option value="Delhi">Delhi</option>
+                        <option value="Jammu and Kashmir">Jammu and Kashmir</option>
+                        <option value="Ladakh">Ladakh</option>
+                        <option value="Lakshadweep">Lakshadweep</option>
+                        <option value="Puducherry">Puducherry</option>
                 </Select>
               </Form.Item>
             </Col>
