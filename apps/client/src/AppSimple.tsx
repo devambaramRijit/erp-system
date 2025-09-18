@@ -14,31 +14,118 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
-    // Check if user is authenticated
-    axios.get('/api/auth/me', { withCredentials: true })
-      .then(res => {
-        setUser(res.data.user);
-      })
-      .catch(() => {
+    // Check if user is authenticated and fetch app data
+    const checkAuth = async () => {
+      try {
+        setLoading(true);
+
+        // First check if user is authenticated
+        const authResponse = await axios.get('/api/auth/me', { withCredentials: true });
+        if (authResponse.data.user) {
+          setUser(authResponse.data.user);
+
+          // Then fetch app data (products and customers)
+          try {
+            const appDataResponse = await axios.get('/api/auth/app-data', { withCredentials: true });
+
+            // Store data in localStorage for offline access
+            if (appDataResponse.data.products) {
+              localStorage.setItem('simpleInventoryProducts', JSON.stringify(appDataResponse.data.products));
+              // Dispatch custom event to notify SimpleProductTab component
+              window.dispatchEvent(new CustomEvent('productsUpdated'));
+            }
+
+            if (appDataResponse.data.customers) {
+              localStorage.setItem('customers', JSON.stringify(appDataResponse.data.customers));
+              // Dispatch custom event to notify CustomerScreen component
+              window.dispatchEvent(new CustomEvent('customersUpdated'));
+            }
+          } catch (appDataError) {
+            console.error('Failed to fetch app data:', appDataError);
+            // Try to fetch data directly from API endpoints if app-data fails
+            try {
+              // Fetch products directly
+              const productsResponse = await axios.get('/api/inventory', { withCredentials: true });
+              if (productsResponse.data) {
+                localStorage.setItem('simpleInventoryProducts', JSON.stringify(productsResponse.data));
+                window.dispatchEvent(new CustomEvent('productsUpdated'));
+              }
+
+              // Fetch customers directly
+              const customersResponse = await axios.get('/api/customers', { withCredentials: true });
+              if (customersResponse.data) {
+                localStorage.setItem('customers', JSON.stringify(customersResponse.data));
+                window.dispatchEvent(new CustomEvent('customersUpdated'));
+              }
+            } catch (directFetchError) {
+              console.error('Failed to fetch data directly:', directFetchError);
+            }
+          }
+        }
+      } catch (error) {
         setUser(null);
-      })
-      .finally(() => {
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    checkAuth();
   }, []);
 
-  const handleLogin = (userData: any) => {
+  // Listen for authentication events and refresh data when needed
+  useEffect(() => {
+    const handleAuthRefresh = () => {
+      checkAuth();
+    };
+
+    window.addEventListener('authRefresh', handleAuthRefresh);
+
+    return () => {
+      window.removeEventListener('authRefresh', handleAuthRefresh);
+    };
+  }, []);
+
+  const handleLogin = (userData: any, products?: any[], customers?: any[]) => {
     setUser(userData);
+
+    // Store products and customers data in localStorage for offline access
+    if (products) {
+      localStorage.setItem('simpleInventoryProducts', JSON.stringify(products));
+      // Dispatch custom event to notify SimpleProductTab component
+      window.dispatchEvent(new CustomEvent('productsUpdated'));
+    }
+
+    if (customers) {
+      localStorage.setItem('customers', JSON.stringify(customers));
+      // Dispatch custom event to notify CustomerScreen component
+      window.dispatchEvent(new CustomEvent('customersUpdated'));
+    }
   };
 
   const handleLogout = async () => {
     try {
       await axios.post('/api/auth/logout', {}, { withCredentials: true });
       setUser(null);
+
+      // Clear products and customers data from localStorage
+      localStorage.removeItem('simpleInventoryProducts');
+      localStorage.removeItem('customers');
+
+      // Dispatch custom events to notify components
+      window.dispatchEvent(new CustomEvent('productsUpdated'));
+      window.dispatchEvent(new CustomEvent('customersUpdated'));
     } catch (error) {
       console.error('Logout failed:', error);
       // Even if the API call fails, clear local user state
       setUser(null);
+
+      // Still clear localStorage data
+      localStorage.removeItem('simpleInventoryProducts');
+      localStorage.removeItem('customers');
+
+      // Dispatch custom events to notify components
+      window.dispatchEvent(new CustomEvent('productsUpdated'));
+      window.dispatchEvent(new CustomEvent('customersUpdated'));
     }
   };
 
@@ -126,7 +213,11 @@ function App() {
           Dashboard
         </button>
         <button
-          onClick={() => setActiveTab('inventory')}
+          onClick={() => {
+            setActiveTab('inventory');
+            // Trigger products refresh
+            window.dispatchEvent(new CustomEvent('productsUpdated'));
+          }}
           style={{
             padding: activeTab === 'inventory' ? '16px 24px' : '6px 24px',
             backgroundColor: activeTab === 'inventory' ? 'white' : '#f9f9f9',
@@ -190,7 +281,11 @@ function App() {
           Invoice Generation
         </button>
         <button
-          onClick={() => setActiveTab('customers')}
+          onClick={() => {
+            setActiveTab('customers');
+            // Trigger customers refresh
+            window.dispatchEvent(new CustomEvent('customersUpdated'));
+          }}
           style={{
             padding: activeTab === 'customers' ? '16px 24px' : '6px 24px',
             backgroundColor: activeTab === 'customers' ? 'white' : '#f9f9f9',

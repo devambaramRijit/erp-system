@@ -73,6 +73,25 @@ const CustomerScreen = () => {
 
   useEffect(() => {
     fetchCustomers();
+
+    // Listen for authentication errors
+    const handleAuthError = () => {
+      // Trigger auth refresh
+      window.dispatchEvent(new CustomEvent('authRefresh'));
+    };
+
+    // Listen for customers updated event
+    const handleCustomersUpdated = () => {
+      fetchCustomers();
+    };
+
+    window.addEventListener('authError', handleAuthError);
+    window.addEventListener('customersUpdated', handleCustomersUpdated);
+
+    return () => {
+      window.removeEventListener('authError', handleAuthError);
+      window.removeEventListener('customersUpdated', handleCustomersUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -95,9 +114,26 @@ const CustomerScreen = () => {
     try {
       setIsLoading(true);
       
-      // First try to get customers from localStorage
-      const savedCustomers = localStorage.getItem('customers');
-      if (savedCustomers) {
+      // Always try to fetch fresh data from backend
+      try {
+        const response = await axios.get('/api/customers', { withCredentials: true });
+        if (response.data) {
+          setCustomers(response.data);
+          setFilteredCustomers(response.data);
+          // Update localStorage with fresh data
+          localStorage.setItem('customers', JSON.stringify(response.data));
+        } else {
+          // No customers from backend
+          setCustomers([]);
+          setFilteredCustomers([]);
+          localStorage.setItem('customers', JSON.stringify([]));
+        }
+      } catch (backendErr) {
+        console.error('Error fetching customers from backend:', backendErr);
+
+        // Fallback to localStorage if backend fails
+        const savedCustomers = localStorage.getItem('customers');
+        if (savedCustomers) {
         let parsedCustomers = JSON.parse(savedCustomers);
         
         // Remove duplicate customers based on name and mobile number
@@ -130,9 +166,10 @@ const CustomerScreen = () => {
         setCustomers(uniqueCustomers);
         setFilteredCustomers(uniqueCustomers);
       } else {
-        // No fallback to mock customers
+        // No customers in localStorage
         setCustomers([]);
         setFilteredCustomers([]);
+      }
       }
     } catch (err) {
       console.error('Error fetching customers:', err);
@@ -165,8 +202,19 @@ const CustomerScreen = () => {
       if (editingCustomer) {
         // Update existing customer
         console.log(`Updating customer with ID: ${editingCustomer.id}`);
-        await mockCustomerApi.updateCustomer(editingCustomer.id, normalizedData);
-        console.log('Update successful');
+
+        // Try to update using backend API first
+        try {
+          await axios.put(`/api/customers/${editingCustomer.id}`, normalizedData, {
+            withCredentials: true
+          });
+          console.log('Backend update successful');
+        } catch (backendErr) {
+          console.error('Backend update failed, falling back to mock API:', backendErr);
+          // Fallback to mock API if backend fails
+          await mockCustomerApi.updateCustomer(editingCustomer.id, normalizedData);
+          console.log('Mock API update successful');
+        }
         
         // Update localStorage
         updatedCustomers = customers.map(customer => 
@@ -191,8 +239,20 @@ const CustomerScreen = () => {
           return;
         }
         
-        const newCustomer = await mockCustomerApi.createCustomer(normalizedData);
-        console.log('Create successful');
+        // Try to create using backend API first
+        let newCustomer;
+        try {
+          const response = await axios.post('/api/customers', normalizedData, {
+            withCredentials: true
+          });
+          newCustomer = response.data;
+          console.log('Backend create successful');
+        } catch (backendErr) {
+          console.error('Backend create failed, falling back to mock API:', backendErr);
+          // Fallback to mock API if backend fails
+          newCustomer = await mockCustomerApi.createCustomer(normalizedData);
+          console.log('Mock API create successful');
+        }
         
         // Update localStorage
         updatedCustomers = [...customers, newCustomer];
@@ -204,9 +264,23 @@ const CustomerScreen = () => {
       // Dispatch custom event to notify other components
       window.dispatchEvent(new CustomEvent('customersUpdated'));
 
-      // Reset form and refresh customer list
+      // Reset form
       resetForm();
-      fetchCustomers();
+
+      // Force a refresh from the backend to ensure data consistency
+      try {
+        const response = await axios.get('/api/customers', { withCredentials: true });
+        if (response.data) {
+          setCustomers(response.data);
+          setFilteredCustomers(response.data);
+          localStorage.setItem('customers', JSON.stringify(response.data));
+        }
+      } catch (err) {
+        console.error('Error refreshing customers from backend:', err);
+        // Fallback to localStorage if backend fails
+        setCustomers(updatedCustomers);
+        setFilteredCustomers(updatedCustomers);
+      }
     } catch (err: any) {
       console.error('Error saving customer:', err);
       console.error('Error response:', err.response);
@@ -240,11 +314,46 @@ const CustomerScreen = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
       try {
-        await mockCustomerApi.deleteCustomer(id);
+        // Try to delete using backend API first
+        try {
+          await axios.delete(`/api/customers/${id}`, {
+            withCredentials: true
+          });
+          console.log('Backend delete successful');
+        } catch (backendErr) {
+          console.error('Backend delete failed, falling back to mock API:', backendErr);
+          // Fallback to mock API if backend fails
+          await mockCustomerApi.deleteCustomer(id);
+          console.log('Mock API delete successful');
+        }
         
-        // Also remove from localStorage
-        const updatedCustomers = customers.filter(customer => customer.id !== id);
-        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+        // Force a refresh from the backend to ensure data consistency
+        try {
+          const response = await axios.get('/api/customers', { withCredentials: true });
+          if (response.data) {
+            const freshCustomers = response.data;
+            setCustomers(freshCustomers);
+            setFilteredCustomers(freshCustomers.filter(customer => 
+              customer.customerName && customer.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              customer.mobileNumber1 && customer.mobileNumber1.includes(searchTerm) ||
+              customer.city && customer.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              customer.state && customer.state.toLowerCase().includes(searchTerm.toLowerCase())
+            ));
+            localStorage.setItem('customers', JSON.stringify(freshCustomers));
+          }
+        } catch (err) {
+          console.error('Error refreshing customers from backend:', err);
+          // Fallback to localStorage if backend fails
+          const updatedCustomers = customers.filter(customer => customer.id !== id);
+          localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+          setCustomers(updatedCustomers);
+          setFilteredCustomers(updatedCustomers.filter(customer => 
+            customer.customerName && customer.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            customer.mobileNumber1 && customer.mobileNumber1.includes(searchTerm) ||
+            customer.city && customer.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            customer.state && customer.state.toLowerCase().includes(searchTerm.toLowerCase())
+          ));
+        }
 
         // Dispatch custom event to notify other components
         window.dispatchEvent(new CustomEvent('customersUpdated'));
@@ -288,12 +397,84 @@ const CustomerScreen = () => {
 
     try {
       console.log('Starting import process');
-      const result = await mockCustomerApi.importCustomers(selectedFile);
-      console.log('Import successful', result);
-      alert(`Import successful: ${result.message}`);
-      fetchCustomers();
-      setShowImportModal(false);
-      setSelectedFile(null);
+
+      // First, try to import using the backend API
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      try {
+        const response = await axios.post('/api/customers/import', formData, {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+
+        console.log('Backend import successful', response.data);
+        alert(`Import successful: ${response.data.message || 'Customers imported successfully'}`);
+
+        // Force a refresh from the backend to ensure data consistency
+        try {
+          const response = await axios.get('/api/customers', { withCredentials: true });
+          if (response.data) {
+            setCustomers(response.data);
+            setFilteredCustomers(response.data);
+            localStorage.setItem('customers', JSON.stringify(response.data));
+          }
+        } catch (err) {
+          console.error('Error refreshing customers from backend:', err);
+          // Fallback to fetchCustomers if backend fails
+          fetchCustomers();
+        }
+        setShowImportModal(false);
+        setSelectedFile(null);
+        return;
+      } catch (backendErr) {
+        console.error('Backend import failed, falling back to mock API:', backendErr);
+
+        // Fallback to mock API if backend fails
+        const result = await mockCustomerApi.importCustomers(selectedFile);
+        console.log('Mock API import successful', result);
+        alert(`Import successful: ${result.message}`);
+
+        // Try to sync the imported data with the backend
+        try {
+          // Get the imported customers from localStorage
+          const savedCustomers = localStorage.getItem('customers');
+          if (savedCustomers) {
+            const customers = JSON.parse(savedCustomers);
+
+            // Send each customer to the backend
+            for (const customer of customers) {
+              try {
+                await axios.post('/api/customers', customer, {
+                  withCredentials: true
+                });
+              } catch (syncErr) {
+                console.error('Failed to sync customer with backend:', syncErr);
+              }
+            }
+          }
+        } catch (syncErr) {
+          console.error('Failed to sync customers with backend:', syncErr);
+        }
+
+        // Force a refresh from the backend to ensure data consistency
+        try {
+          const response = await axios.get('/api/customers', { withCredentials: true });
+          if (response.data) {
+            setCustomers(response.data);
+            setFilteredCustomers(response.data);
+            localStorage.setItem('customers', JSON.stringify(response.data));
+          }
+        } catch (err) {
+          console.error('Error refreshing customers from backend:', err);
+          // Fallback to fetchCustomers if backend fails
+          fetchCustomers();
+        }
+        setShowImportModal(false);
+        setSelectedFile(null);
+      }
     } catch (err: any) {
       console.error('Error importing customers:', err);
       alert(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);

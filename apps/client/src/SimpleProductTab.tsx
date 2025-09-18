@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import axios from 'axios';
 
 interface Product {
   id: string;
@@ -39,31 +40,70 @@ const SimpleProductTab: React.FC = () => {
 
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  // Load products from localStorage
+  // Load products from backend
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
 
-        // Always try to fetch from localStorage first
-        const savedProducts = localStorage.getItem('simpleInventoryProducts');
-        if (savedProducts) {
-          setProducts(JSON.parse(savedProducts));
+        // Always try to fetch fresh data from backend
+        const response = await axios.get('/api/inventory', { withCredentials: true });
+        if (response.data) {
+          // Transform server data to match client-side Product interface
+          const transformedProducts = response.data.map(item => {
+            console.log('Transforming item:', item);
+            return {
+              id: item.id,
+              sku: item.sku,
+              name: item.name,
+              productType: item.productType || item.type || '',
+              productCategory: item.category || '',
+              quantity: item.quantity,
+              costPricePerPiece: item.costPricePerPiece !== undefined ? item.costPricePerPiece : (item.price !== undefined ? item.price : 0),
+              ratePerPiece: item.ratePerPiece !== undefined ? item.ratePerPiece : (item.price !== undefined ? item.price : 0),
+              costPricePerInch: item.costPricePerInch !== undefined ? item.costPricePerInch : 0,
+              ratePerInch: item.ratePerInch !== undefined ? item.ratePerInch : 0
+            };
+          });
+          
+          setProducts(transformedProducts);
+          // Update localStorage with fresh data
+          localStorage.setItem('simpleInventoryProducts', JSON.stringify(transformedProducts));
         } else {
-          // Initialize with empty array if no data in localStorage
+          // Initialize with empty array if no data from backend
           setProducts([]);
+          localStorage.setItem('simpleInventoryProducts', JSON.stringify([]));
         }
 
         setError(null);
       } catch (err) {
         setError('Failed to fetch products');
         console.error(err);
+        // Fallback to localStorage if backend fails
+        const savedProducts = localStorage.getItem('simpleInventoryProducts');
+        if (savedProducts) {
+          setProducts(JSON.parse(savedProducts));
+        } else {
+          setProducts([]);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchProducts();
+
+    // Listen for authentication errors
+    const handleAuthError = () => {
+      // Trigger auth refresh
+      window.dispatchEvent(new CustomEvent('authRefresh'));
+    };
+
+    window.addEventListener('authError', handleAuthError);
+
+    return () => {
+      window.removeEventListener('authError', handleAuthError);
+    };
   }, []);
 
   // Save products to localStorage whenever they change
@@ -75,6 +115,26 @@ const SimpleProductTab: React.FC = () => {
       window.dispatchEvent(new CustomEvent('productsUpdated'));
     }
   }, [products, loading]);
+
+  // Backup products to sessionStorage whenever they change
+  useEffect(() => {
+    sessionStorage.setItem('simpleInventoryProducts', JSON.stringify(products));
+  }, [products]);
+
+  // Load products from localStorage on mount
+  useEffect(() => {
+    const savedProducts = localStorage.getItem('simpleInventoryProducts');
+    if (savedProducts) {
+      try {
+        const parsedProducts = JSON.parse(savedProducts);
+        if (Array.isArray(parsedProducts) && parsedProducts.length > 0) {
+          setProducts(parsedProducts);
+        }
+      } catch (err) {
+        console.error('Error parsing saved products:', err);
+      }
+    }
+  }, []);
 
   // Handle sorting
   const requestSort = (key: keyof Product) => {
@@ -133,14 +193,21 @@ const SimpleProductTab: React.FC = () => {
     setShowAddForm(true);
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
+        // First delete from server
+        await axios.delete(`/api/inventory/${id}`, { withCredentials: true });
+        
+        // Then update local state
         const updatedProducts = products.filter(product => product.id !== id);
         setProducts(updatedProducts);
       } catch (err) {
         setError('Failed to delete product');
         console.error(err);
+        // Fallback to just updating local state if server request fails
+        const updatedProducts = products.filter(product => product.id !== id);
+        setProducts(updatedProducts);
       }
     }
   };
@@ -181,6 +248,28 @@ const SimpleProductTab: React.FC = () => {
           product.id === editingProduct.id ? updatedProduct : product
         );
         setProducts(updatedProducts);
+        
+        // Send the updated product to the server
+        try {
+          await axios.put(`/api/inventory/${editingProduct.id}`, {
+            sku: updatedProduct.sku,
+            name: updatedProduct.name,
+            description: updatedProduct.name, // Use name as description
+            quantity: updatedProduct.quantity,
+            price: updatedProduct.ratePerPiece || 0, // Use ratePerPiece as price
+            category: updatedProduct.productCategory,
+            productType: updatedProduct.productType || '',
+            costPricePerPiece: updatedProduct.costPricePerPiece || 0,
+            ratePerPiece: updatedProduct.ratePerPiece || 0,
+            costPricePerInch: updatedProduct.costPricePerInch || 0,
+            ratePerInch: updatedProduct.ratePerInch || 0
+          }, { withCredentials: true });
+          
+          console.log('Product updated successfully on server');
+        } catch (error) {
+          console.error('Failed to update product on server:', error);
+          alert('Failed to update product on server. Changes may not persist.');
+        }
 
         // Reset editing state
         setEditingProduct(null);
@@ -290,7 +379,7 @@ const SimpleProductTab: React.FC = () => {
           id: "prod-" + Date.now() + Math.random(), // unique ID
           sku: item["SKU"] || "",
           name: item["Product Name"] || "",
-          productType: item["Product Type"] || (isManufactured ? "Manufactured" : "Traded"),
+          productType: item["Product Type"] || "Traded",
           productCategory: category,
           quantity: Number(item["Quantity"] || 0),
           costPricePerPiece:
@@ -315,13 +404,48 @@ const SimpleProductTab: React.FC = () => {
       // Merge with existing products instead of replacing
       console.log('Previous products count:', products.length);
       console.log('Imported products count:', transformedProducts.length);
-      setProducts((prevProducts) => {
-        console.log('Prev products count:', prevProducts.length);
-        const newProducts = [...prevProducts, ...transformedProducts];
-        console.log('New products count:', newProducts.length);
-        return newProducts;
-      });
-      alert(`Successfully imported ${transformedProducts.length} products!`);
+      // First save to the server
+      const saveToServer = async () => {
+        try {
+          for (const product of transformedProducts) {
+            // Transform product data to match server expectations
+            const serverProduct = {
+              sku: product.sku,
+              name: product.name,
+              category: product.productCategory, // Map productCategory to category
+              description: product.name, // Use name as description
+              quantity: product.quantity,
+              price: product.ratePerPiece || 0, // Use ratePerPiece as price
+              productType: product.productType || 'Traded', // Include the product type with a default
+              costPricePerPiece: product.costPricePerPiece || 0,
+              ratePerPiece: product.ratePerPiece || 0,
+              costPricePerInch: product.costPricePerInch || 0,
+              ratePerInch: product.ratePerInch || 0
+            };
+            
+            // Log the data being sent to server
+            console.log('Sending to server:', JSON.stringify(serverProduct, null, 2));
+            
+            await axios.post('/api/inventory', serverProduct, { withCredentials: true });
+          }
+          console.log('All products saved to server successfully');
+          
+          // After successful server save, update local state
+          setProducts((prevProducts) => {
+            console.log('Prev products count:', prevProducts.length);
+            const newProducts = [...prevProducts, ...transformedProducts];
+            console.log('New products count:', newProducts.length);
+            return newProducts;
+          });
+          alert(`Successfully imported ${transformedProducts.length} products!`);
+        } catch (err) {
+          console.error('Error saving products to server:', err);
+          setError('Failed to save products to server');
+          alert(`Error saving products to server: ${err instanceof Error ? err.message : "Unknown error"}`);
+        }
+      };
+      
+      saveToServer();
     } catch (err) {
       console.error("Error importing file:", err);
       setError("Failed to import products");
@@ -655,12 +779,24 @@ const SimpleProductTab: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {currentItems.map(product => (
+              {currentItems.map(product => {
+                // Debug: log the product data being rendered
+                console.log('Rendering product:', {
+                  id: product.id,
+                  name: product.name,
+                  productType: product.productType,
+                  costPricePerPiece: product.costPricePerPiece,
+                  ratePerPiece: product.ratePerPiece,
+                  costPricePerInch: product.costPricePerInch,
+                  ratePerInch: product.ratePerInch
+                });
+                
+                return (
                 <tr key={product.id} style={{ backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', color: '#000' }}>
-                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.productType || 'Traded'}</td>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.productType || '-'}</td>
                   <td style={{ padding: '12px 15px', border: 'none' }}>{product.sku}</td>
                   <td style={{ padding: '12px 15px', border: 'none' }}>{product.name}</td>
-                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.productCategory}</td>
+                  <td style={{ padding: '12px 15px', border: 'none' }}>{product.productCategory || '-'}</td>
                   <td style={{ padding: '12px 15px', border: 'none' }}>{product.quantity}</td>
                   <td style={{ padding: '12px 15px', border: 'none' }}>
                     {product.costPricePerPiece != null ? `₹${product.costPricePerPiece.toFixed(2)}` : '-'}
@@ -708,7 +844,8 @@ const SimpleProductTab: React.FC = () => {
                     </button>
                   </td>
                 </tr>
-              ))}
+              );
+            })}
             </tbody>
           </table>
 

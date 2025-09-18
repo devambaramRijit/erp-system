@@ -30,53 +30,27 @@ app.use(session({
   cookie: { secure: false }
 }));
 
-// Mock inventory data
-let inventoryItems = [
-  {
-    id: '1',
-    sku: 'ITEM001',
-    name: 'Laptop Computer',
-    description: 'High-performance laptop for business use',
-    quantity: 15,
-    price: 999.99,
-    category: 'Electronics',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: '2',
-    sku: 'ITEM002',
-    name: 'Office Chair',
-    description: 'Ergonomic office chair with lumbar support',
-    quantity: 32,
-    price: 249.99,
-    category: 'Furniture',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: '3',
-    sku: 'ITEM003',
-    name: 'Wireless Mouse',
-    description: 'Bluetooth wireless mouse with precision tracking',
-    quantity: 75,
-    price: 29.99,
-    category: 'Electronics',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: '4',
-    sku: 'ITEM004',
-    name: 'Desk Lamp',
-    description: 'LED desk lamp with adjustable brightness',
-    quantity: 24,
-    price: 49.99,
-    category: 'Office Supplies',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+// Load inventory data from file or use empty array
+let inventoryItems = [];
+
+// Function to save inventory data to file
+function saveInventoryData() {
+  fs.writeFileSync('inventory-data.json', JSON.stringify(inventoryItems, null, 2));
+}
+
+// Load inventory data from file if it exists
+if (fs.existsSync('inventory-data.json')) {
+  try {
+    const data = fs.readFileSync('inventory-data.json', 'utf8');
+    inventoryItems = JSON.parse(data);
+  } catch (err) {
+    console.error('Error loading inventory data:', err);
+    inventoryItems = [];
   }
-];
+} else {
+  // Create initial empty file
+  saveInventoryData();
+}
 
 // Auth routes
 app.post('/api/auth/login', (req, res) => {
@@ -129,6 +103,9 @@ app.get('/api/auth/me', (req, res) => {
 
 // Inventory routes
 app.get('/api/inventory', (req, res) => {
+  console.log('=== INVENTORY GET REQUEST ===');
+  console.log('Returning inventory items:', JSON.stringify(inventoryItems, null, 2));
+  console.log('=== END INVENTORY GET REQUEST ===\n');
   res.json(inventoryItems);
 });
 
@@ -145,16 +122,21 @@ app.post('/api/inventory', (req, res) => {
   console.log('=== INVENTORY POST REQUEST ===');
   console.log('Received data:', JSON.stringify(req.body, null, 2));
   console.log('Expected fields: sku, name, category');
-  console.log('Optional fields: description, quantity, price');
+  console.log('Optional fields: description, quantity, price, productType, costPricePerPiece, ratePerPiece, costPricePerInch, ratePerInch');
   
-  const { sku, name, description, quantity, price, category } = req.body;
+  const { sku, name, description, quantity, price, category, productType, costPricePerPiece, ratePerPiece, costPricePerInch, ratePerInch } = req.body;
 
   if (!sku || !name || !category) {
     console.log('Validation failed. Missing required fields.');
     console.log('Missing:', {
       sku: !sku ? 'SKU is missing' : 'OK',
       name: !name ? 'Name is missing' : 'OK',
-      category: !category ? 'Category is missing' : 'OK'
+      category: !category ? 'Category is missing' : 'OK',
+      productType: !productType ? 'Product Type is missing' : 'OK',
+      costPricePerPiece: !costPricePerPiece ? 'Cost Price Per Piece is missing' : 'OK',
+      ratePerPiece: !ratePerPiece ? 'Rate Per Piece is missing' : 'OK',
+      costPricePerInch: !costPricePerInch ? 'Cost Price Per Inch is missing' : 'OK',
+      ratePerInch: !ratePerInch ? 'Rate Per Inch is missing' : 'OK'
     });
     return res.status(400).json({ message: 'SKU, name, and category are required' });
   }
@@ -169,21 +151,51 @@ app.post('/api/inventory', (req, res) => {
     quantity: Number(quantity) || 0,
     price: Number(price) || 0,
     category,
+    productType: req.body.productType || 'Traded',
+    costPricePerPiece: Number(req.body.costPricePerPiece) || 0,
+    ratePerPiece: Number(req.body.ratePerPiece) || 0,
+    costPricePerInch: Number(req.body.costPricePerInch) || 0,
+    ratePerInch: Number(req.body.ratePerInch) || 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+  
+  console.log('Created new item:', JSON.stringify(newItem, null, 2));
 
   inventoryItems.push(newItem);
   
   // Log response being sent to frontend
   console.log('Sending response to frontend:', JSON.stringify(newItem, null, 2));
+  console.log('All fields included in response:', {
+    id: newItem.id,
+    sku: newItem.sku,
+    name: newItem.name,
+    description: newItem.description,
+    quantity: newItem.quantity,
+    price: newItem.price,
+    category: newItem.category,
+    productType: newItem.productType,
+    costPricePerPiece: newItem.costPricePerPiece,
+    ratePerPiece: newItem.ratePerPiece,
+    costPricePerInch: newItem.costPricePerInch,
+    ratePerInch: newItem.ratePerInch,
+    createdAt: newItem.createdAt,
+    updatedAt: newItem.updatedAt
+  });
   console.log('=== END INVENTORY POST REQUEST ===\n');
+  
+  // Save to file
+  saveInventoryData();
+  
+
+  
+
   
   res.status(201).json(newItem);
 });
 
 app.put('/api/inventory/:id', (req, res) => {
-  const { sku, name, description, quantity, price, category } = req.body;
+  const { sku, name, description, quantity, price, category, productType, costPricePerPiece, ratePerPiece, costPricePerInch, ratePerInch } = req.body;
   const itemIndex = inventoryItems.findIndex(item => item.id === req.params.id);
 
   if (itemIndex === -1) {
@@ -202,8 +214,18 @@ app.put('/api/inventory/:id', (req, res) => {
     quantity: Number(quantity) || inventoryItems[itemIndex].quantity,
     price: Number(price) || inventoryItems[itemIndex].price,
     category,
+    productType: productType || inventoryItems[itemIndex].productType || 'Traded',
+    costPricePerPiece: costPricePerPiece !== undefined ? Number(costPricePerPiece) : (inventoryItems[itemIndex].costPricePerPiece !== undefined ? inventoryItems[itemIndex].costPricePerPiece : 0),
+    ratePerPiece: ratePerPiece !== undefined ? Number(ratePerPiece) : (inventoryItems[itemIndex].ratePerPiece !== undefined ? inventoryItems[itemIndex].ratePerPiece : 0),
+    costPricePerInch: costPricePerInch !== undefined ? Number(costPricePerInch) : (inventoryItems[itemIndex].costPricePerInch !== undefined ? inventoryItems[itemIndex].costPricePerInch : 0),
+    ratePerInch: ratePerInch !== undefined ? Number(ratePerInch) : (inventoryItems[itemIndex].ratePerInch !== undefined ? inventoryItems[itemIndex].ratePerInch : 0),
     updatedAt: new Date().toISOString()
   };
+  
+  console.log('Updated item:', JSON.stringify(inventoryItems[itemIndex], null, 2));
+  
+  // Save to file
+  saveInventoryData();
 
   res.json(inventoryItems[itemIndex]);
 });
@@ -216,6 +238,10 @@ app.delete('/api/inventory/:id', (req, res) => {
   }
 
   inventoryItems.splice(itemIndex, 1);
+  
+  // Save to file
+  saveInventoryData();
+  
   res.status(204).send();
 });
 

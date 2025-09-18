@@ -5,15 +5,20 @@ import type { SessionUser } from "@/../../packages/shared/schema/user";
 
 interface AuthContextValue {
   user: SessionUser | null;
+  products: any[] | null;
+  customers: any[] | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshAppData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [products, setProducts] = useState<any[] | null>(null);
+  const [customers, setCustomers] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,11 +38,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const refreshAppData = async () => {
+    try {
+      const response = await api.get("/auth/app-data");
+      if (response.products) setProducts(response.products);
+      if (response.customers) setCustomers(response.customers);
+    } catch (error) {
+      console.error("Failed to refresh app data:", error);
+    }
+  };
+
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const data = await api.post<{ user: SessionUser }>("/auth/login", { email, password });
+      const data = await api.post<{ user: SessionUser; products?: any[]; customers?: any[] }>("/auth/login", { email, password });
       setUser(data.user);
+      if (data.products) setProducts(data.products);
+      if (data.customers) setCustomers(data.customers);
     } finally {
       setLoading(false);
     }
@@ -46,9 +63,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await api.post<unknown>("/auth/logout");
     setUser(null);
+    setProducts(null);
+    setCustomers(null);
   };
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading]);
+  const value = useMemo(() => ({ user, products, customers, loading, login, logout, refreshAppData }), [user, products, customers, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

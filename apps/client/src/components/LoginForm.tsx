@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-export function LoginForm({ onLogin }: { onLogin: (user: any) => void }) {
+export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], customers?: any[]) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +20,7 @@ export function LoginForm({ onLogin }: { onLogin: (user: any) => void }) {
       );
 
       if (res.data.user) {
-        onLogin(res.data.user);
+        onLogin(res.data.user, res.data.products, res.data.customers);
       } else {
         setError('Login failed: No user data returned');
       }
