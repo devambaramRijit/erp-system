@@ -1,4 +1,6 @@
 {
     "Codegeex.CompletionDelay": 1,
-    "Codegeex.GenerationPreference": "automatic"
+    "Codegeex.GenerationPreference": "automatic",
+    "Codegeex.RepoIndex": true,
+    "Codegeex.Chat.fontSize": 11
 }

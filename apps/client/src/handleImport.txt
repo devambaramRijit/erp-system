@@ -1,0 +1,75 @@
+  const handleImport = async () => {
+    if (fileList.length === 0) {
+      setImportError('Please select a file to import');
+      return;
+    }
+
+    setImportLoading(true);
+    setImportError(null);
+    setImportSuccess(null);
+
+    try {
+      const selectedFile = fileList[0];
+
+      // Use our import service to process the Excel file
+      const importResult = await importService.processExcelFile(selectedFile);
+
+      if (!importResult.success) {
+        setImportError(importResult.message || 'Failed to process Excel file');
+        return;
+      }
+
+      const customersToImport = importResult.customers || [];
+
+      if (customersToImport.length === 0) {
+        setImportError('No valid customer data found in the file');
+        return;
+      }
+
+      // Try to send to API if online
+      if (apiStatus === 'online') {
+        try {
+          // Use our API service to import customers
+          const response = await apiService.importCustomers(selectedFile);
+          setImportSuccess(response.message || 'Customers imported successfully');
+
+          // Refresh data after successful import
+          fetchCustomers();
+        } catch (apiError) {
+          console.error('API import failed, using local processing:', apiError);
+          // Fall back to local processing
+          throw apiError;
+        }
+      } else {
+        // If API is offline, use local processing only
+        throw new Error('API is offline, using local processing');
+      }
+    } catch (error) {
+      console.error('Error importing customers:', error);
+
+      // Local processing as fallback
+      try {
+        // Get the current customers from localStorage to ensure we have the latest data
+        const storedCustomers = localStorage.getItem('customers');
+        const currentCustomers = storedCustomers ? JSON.parse(storedCustomers) : customers;
+
+        // If we have customers from the import service, use them
+        const importedCustomers = importResult?.customers || [];
+
+        // Add the imported customers to the current list
+        const updatedCustomers = [...currentCustomers, ...importedCustomers];
+
+        // Update state and localStorage
+        setCustomers(updatedCustomers);
+        setFilteredCustomers(updatedCustomers);
+        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+
+        setImportSuccess(`Successfully processed ${selectedFile.name} locally and added ${importedCustomers.length} customers`);
+      } catch (localErr) {
+        console.error('Local processing failed:', localErr);
+        setImportError('Error processing file: ' + (localErr instanceof Error ? localErr.message : 'Unknown error'));
+      }
+    } finally {
+      setImportLoading(false);
+    }
+  };

@@ -13,7 +13,7 @@ echo Backup created.
 
 REM Replace package.json with the new version without Electron
 echo Updating package.json...
-copy "package-new.json" "package.json"
+move /Y "package-new.json" "package.json"
 echo package.json updated.
 
 REM Remove the electron directory
@@ -96,8 +96,8 @@ echo echo.>> "Hide Technical Files-new.bat"
 echo echo To show them again, run "Show Technical Files.bat">> "Hide Technical Files-new.bat"
 echo echo.>> "Hide Technical Files-new.bat"
 echo pause>> "Hide Technical Files-new.bat"
-copy "Hide Technical Files-new.bat" "Hide Technical Files.bat"
-del "Hide Technical Files-new.bat"
+move /Y "Hide Technical Files-new.bat" "Hide Technical Files.bat"
+
 echo Hide Technical Files.bat updated.
 
 REM Update Show Technical Files.bat to remove Electron references
@@ -138,8 +138,8 @@ echo echo.>> "Show Technical Files-new.bat"
 echo echo All technical files and folders are now visible!>> "Show Technical Files-new.bat"
 echo echo.>> "Show Technical Files-new.bat"
 echo pause>> "Show Technical Files-new.bat"
-copy "Show Technical Files-new.bat" "Show Technical Files.bat"
-del "Show Technical Files-new.bat"
+move /Y "Show Technical Files-new.bat" "Show Technical Files.bat"
+
 echo Show Technical Files.bat updated.
 
 REM Update First-Time Setup.bat to remove Electron references
@@ -193,13 +193,12 @@ echo pause>> "First-Time Setup-new.bat"
 echo.>> "First-Time Setup-new.bat"
 echo REM Create desktop shortcut>> "First-Time Setup-new.bat"
 echo call "%%~dp0Create Desktop Icon.bat">> "First-Time Setup-new.bat"
-copy "First-Time Setup-new.bat" "First-Time Setup.bat"
-del "First-Time Setup-new.bat"
+move /Y "First-Time Setup-new.bat" "First-Time Setup.bat"
+
 echo First-Time Setup.bat updated.
 
 REM Clean up
 echo Cleaning up temporary files...
-del "package-new.json"
 echo Temporary files removed.
 
 echo.

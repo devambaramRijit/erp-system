@@ -1,16 +1,24 @@
 // Define CustomerData interface
 export interface CustomerData {
   id: string;
-  customerName: string;
-  houseNumber: string;
-  city: string;
-  district: string;
-  state: string;
-  pinCode: string;
-  landmark: string;
-  mobileNumber1: string;
-  mobileNumber2: string;
-  source: string;
+  name?: string; // Database field
+  customerName?: string; // Legacy field
+  email?: string; // Database field
+  phone?: string; // Database field
+  address?: string; // Database field
+  houseNumber?: string; // Legacy field
+  city?: string;
+  district?: string;
+  state?: string;
+  postalCode?: string; // Database field
+  pinCode?: string; // Legacy field
+  landmark?: string;
+  mobileNumber1?: string; // Legacy field
+  mobileNumber2?: string; // Legacy field
+  source?: string;
+  company?: string; // Database field
+  taxId?: string; // Database field
+  notes?: string; // Database field
 }
 
 // Load customers from local storage or use default data

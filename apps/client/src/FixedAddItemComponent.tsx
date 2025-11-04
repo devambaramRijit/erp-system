@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+// Set correct API URL
+axios.defaults.baseURL = 'http://192.168.0.107:3000/api';
+
 interface FixedAddItemProps {
   onItemAdded: (item: any) => void;
 }
@@ -57,7 +60,7 @@ const FixedAddItemComponent: React.FC<FixedAddItemProps> = ({ onItemAdded }) => 
       // Log data being sent to backend
       console.log('Sending data to backend:', JSON.stringify(itemToSave, null, 2));
       
-      const response = await axios.post('/api/inventory', itemToSave, {
+      const response = await axios.post('/inventory', itemToSave, {
         headers: {
           'Content-Type': 'application/json'
         }

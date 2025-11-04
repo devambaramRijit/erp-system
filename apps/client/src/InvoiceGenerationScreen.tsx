@@ -134,6 +134,38 @@ const InvoiceGenerationScreen: React.FC = () => {
   // Load customers from localStorage and set up event listeners
   useEffect(() => {
     const loadCustomers = () => {
+      // Check if we have cached customer data in sessionStorage (faster access)
+      const cachedCustomers = sessionStorage.getItem('cachedCustomers');
+      const cacheTimestamp = sessionStorage.getItem('customersCacheTimestamp');
+      const now = new Date().getTime();
+      
+      // Use cached data if it's less than 5 minutes old
+      if (cachedCustomers && cacheTimestamp && (now - parseInt(cacheTimestamp) < 300000)) {
+        try {
+          const customersData = JSON.parse(cachedCustomers);
+          // Make sure the data is in the correct format for InvoiceScreen
+          const formattedCustomers = customersData.map((customer: any) => ({
+            id: customer.id,
+            customerName: customer.customerName,
+            mobileNumber1: customer.mobileNumber1 || '',
+            mobileNumber2: customer.mobileNumber2 || '',
+            email: customer.email || '',
+            houseNumber: customer.houseNumber || '',
+            city: customer.city || '',
+            district: customer.district || '',
+            state: customer.state || '',
+            pinCode: customer.pinCode || '',
+            landmark: customer.landmark || '',
+            source: customer.source || ''
+          }));
+          setCustomers(formattedCustomers);
+          return; // Exit early if we used cached data
+        } catch (error) {
+          console.error('Error parsing cached customers:', error);
+        }
+      }
+      
+      // If no valid cache, load from localStorage
       const savedCustomers = localStorage.getItem('customers');
       if (savedCustomers) {
         try {
@@ -154,6 +186,14 @@ const InvoiceGenerationScreen: React.FC = () => {
             source: customer.source || ''
           }));
           setCustomers(formattedCustomers);
+          
+          // Cache the data in sessionStorage for faster access next time
+          try {
+            sessionStorage.setItem('cachedCustomers', JSON.stringify(customersData));
+            sessionStorage.setItem('customersCacheTimestamp', new Date().getTime().toString());
+          } catch (error) {
+            console.error('Error caching customers:', error);
+          }
         } catch (error) {
           console.error('Error parsing saved customers:', error);
           setCustomers([]);
@@ -188,6 +228,36 @@ const InvoiceGenerationScreen: React.FC = () => {
   useEffect(() => {
     const loadProducts = async () => {
       try {
+        // Check for cached products in sessionStorage first
+        const cachedProducts = sessionStorage.getItem('cachedProducts');
+        const cacheTimestamp = sessionStorage.getItem('productsCacheTimestamp');
+        const now = new Date().getTime();
+        
+        // Use cached data if it's less than 5 minutes old
+        if (cachedProducts && cacheTimestamp && (now - parseInt(cacheTimestamp) < 300000)) {
+          try {
+            const parsedProducts = JSON.parse(cachedProducts);
+            // Transform the data to match our Product interface
+            const transformedProducts = parsedProducts.map((item: any) => ({
+              id: item.id,
+              sku: item.sku,
+              name: item.name,
+              size: item.size,
+              unit: item.unit,
+              quantity: item.quantity,
+              price: item.price,
+              productType: item.productType,
+              category: item.category,
+              costPricePerInch: item.costPricePerInch,
+              ratePerInch: item.ratePerInch
+            }));
+            setProducts(transformedProducts);
+            return; // Exit early if we used cached data
+          } catch (error) {
+            console.error('Error parsing cached products:', error);
+          }
+        }
+        
         // First try to get products from localStorage
         const savedProducts = localStorage.getItem('simpleInventoryProducts');
         if (savedProducts) {
@@ -288,6 +358,7 @@ const InvoiceGenerationScreen: React.FC = () => {
 
   // Handles Adding Invoice
   const handleAddInvoice = () => {
+    console.log('Add Invoice button clicked');
     setEditingInvoice(null);
     const invoiceNumber = generateInvoiceNumber();
     const newInvoice = {
@@ -309,7 +380,9 @@ const InvoiceGenerationScreen: React.FC = () => {
     };
     form.setFieldsValue(newInvoice);
     setCurrentInvoice(newInvoice);
+    console.log('Setting visible to true');
     setVisible(true);
+    console.log('Visible set to true');
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
@@ -854,6 +927,7 @@ const InvoiceGenerationScreen: React.FC = () => {
       <Modal
         title={editingInvoice ? 'Edit Invoice' : 'Add Invoice'}
         open={visible}
+        afterOpenChange={(open) => console.log('Modal open state changed to:', open)}
         onOk={handleSaveInvoice}
         onCancel={() => setVisible(false)}
         width={800}

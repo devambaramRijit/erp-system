@@ -187,6 +187,24 @@
     top: 0;
     width: 100%;
   }
+
+  /* Ensure customer address is visible when printing */
+  .invoice-customer div, .invoice-sender div {
+    visibility: visible;
+  }
+
+  /* Make sure all text elements in the invoice are visible */
+  .invoice-container p, 
+  .invoice-container span, 
+  .invoice-container div, 
+  .invoice-container h1, 
+  .invoice-container h2, 
+  .invoice-container h3, 
+  .invoice-container h4, 
+  .invoice-container h5, 
+  .invoice-container h6 {
+    visibility: visible;
+  }
 }
 
 /* Invoice summary layout */

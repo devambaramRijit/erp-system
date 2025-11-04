@@ -1,4 +1,26 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  Row,
+  Col,
+  Card,
+  Statistic,
+  Table,
+  Typography,
+  Empty,
+  DatePicker,
+  Select,
+  Radio,
+  Space
+} from 'antd';
+import axios from 'axios';
+import './Dashboard.css'; // Import the CSS file
+
+// Set correct API URL
+axios.defaults.baseURL = 'http://localhost:3000/api';
+import { ShoppingCartOutlined, DollarOutlined, WarningOutlined, RiseOutlined } from '@ant-design/icons';
+import InventoryCategoryChart from '../components/InventoryCategoryChartNew';
+import ProductSalesPieChart from '../components/ProductSalesPieChartNew';
+import SalesTrendChart from '../components/SalesTrendChart';
 
 interface DashboardProps {
   user: {
@@ -14,12 +36,10 @@ interface InventoryItem {
   id: string;
   sku: string;
   name: string;
-  description: string;
   quantity: number;
-  price: number;
   category: string;
+  ratePerPiece?: number;
 }
-
 interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -27,377 +47,317 @@ interface Invoice {
   customerName: string;
   customerEmail: string;
   billingAddress: string;
-  invoiceType: 'manufactured';
+  invoiceType?: 'manufactured' | 'traded';
   items: any[];
   subtotal: number;
   discountRate: number;
   discountAmount: number;
   advancePayment: number;
+  balanceDue: number;
   shippingCharges: number;
+  paymentStatus: string;
   packingCharges: number;
+  discountType?: 'percentage' | 'decimal';
   total: number;
   notes?: string;
 }
 
+const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
+const { Option } = Select;
+
 export function Dashboard({ user, onLogout }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [todaySales, setTodaySales] = useState(0);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([
-    {
-      id: "1",
-      sku: "ITEM001",
-      name: "Laptop Computer",
-      description: "High-performance laptop for business use",
-      quantity: 15,
-      price: 999.99,
-      category: "Electronics",
-    },
-    {
-      id: "2",
-      sku: "ITEM002",
-      name: "Office Chair",
-      description: "Ergonomic office chair with lumbar support",
-      quantity: 32,
-      price: 249.99,
-      category: "Furniture",
-    },
-    {
-      id: "3",
-      sku: "ITEM003",
-      name: "Wireless Mouse",
-      description: "Bluetooth wireless mouse with precision tracking",
-      quantity: 75,
-      price: 29.99,
-      category: "Electronics",
-    },
-    {
-      id: "4",
-      sku: "ITEM004",
-      name: "Desk Lamp",
-      description: "LED desk lamp with adjustable brightness",
-      quantity: 24,
-      price: 49.99,
-      category: "Office Supplies",
-    },
-  ]);
-
-  const [newItem, setNewItem] = useState({
-    sku: "",
-    name: "",
-    description: "",
-    quantity: 0,
-    price: 0,
-    category: "",
-  });
-  const [showAddForm, setShowAddForm] = useState(false);
-
-  const totalValue = inventoryItems.reduce(
-    (sum, item) => sum + item.quantity * item.price,
-    0
-  );
-  const lowStockItems = inventoryItems.filter((i) => i.quantity < 10).length;
-
-  const handleAddItem = () => {
-    if (!newItem.sku || !newItem.name || !newItem.category) {
-      alert("Please fill in all required fields");
-      return;
-    }
-    const itemToAdd: InventoryItem = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...newItem,
-    };
-    setInventoryItems((prev) => [...prev, itemToAdd]);
-    setNewItem({
-      sku: "",
-      name: "",
-      description: "",
-      quantity: 0,
-      price: 0,
-      category: "",
-    });
-    setShowAddForm(false);
-  };
-
-  const handleDeleteItem = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this item?")) {
-      setInventoryItems((prev) => prev.filter((i) => i.id !== id));
-    }
-  };
+  const [dateRange, setDateRange] = useState<[any, any] | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [stats, setStats] = useState({ totalItems: 0, totalValue: 0, lowStockCount: 0 });
+  const [salesPeriod, setSalesPeriod] = useState('Monthly');
+  const [selectedProduct, setSelectedProduct] = useState('All');
+  const [selectedInventoryCategory, setSelectedInventoryCategory] = useState('All');
+  const [inventoryCategories, setInventoryCategories] = useState<string[]>(['All']);
 
   useEffect(() => {
-    // Load invoices from localStorage
-    const savedInvoices = localStorage.getItem('invoices');
-    if (savedInvoices) {
-      const parsedInvoices = JSON.parse(savedInvoices);
-      setInvoices(parsedInvoices);
-      
-      // Calculate today's sales
-      const today = new Date().toDateString();
-      const todayInvoices = parsedInvoices.filter((invoice: Invoice) => {
-        const invoiceDate = new Date(invoice.date).toDateString();
-        return invoiceDate === today;
-      });
-      
-      const totalTodaySales = todayInvoices.reduce((sum: number, invoice: Invoice) => {
-        // Calculate total without advance payment
-        const subtotal = invoice.items.reduce((itemSum: number, item: any) => {
-          if (item.productCategory === 'Laddu Gopal Base') {
-            return itemSum + item.total;
-          } else {
-            return itemSum + ((item.rate || 0) * (item.quantity || 0));
-          }
-        }, 0);
-        
-        const discountAmount = invoice.discountType === 'percentage'
-          ? (subtotal * (invoice.discountRate || 0)) / 100
-          : (invoice.discountRate || 0);
-          
-        const subtotalAfterDiscount = subtotal - discountAmount;
-        const total = subtotalAfterDiscount + (invoice.shippingCharges || 0) + (invoice.packingCharges || 0);
-        
-        return sum + total;
-      }, 0);
-      
-      setTodaySales(totalTodaySales);
-    }
+    const loadDashboardData = async () => {
+      // Fetch Invoices from API with localStorage fallback
+      try {
+        const invoicesResponse = await axios.get('/invoices', { withCredentials: true });
+        if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {
+          setInvoices(invoicesResponse.data);
+        }
+      } catch (error) {
+        console.warn('Could not fetch invoices from API, using localStorage.', error);
+        const savedInvoices = localStorage.getItem('invoices');
+        if (savedInvoices) setInvoices(JSON.parse(savedInvoices));
+      }
+
+      // Fetch Inventory from API with localStorage fallback
+      try {
+        const productsResponse = await axios.get('/inventory', { withCredentials: true });
+        if (productsResponse.data && Array.isArray(productsResponse.data)) {
+          const items: InventoryItem[] = productsResponse.data.map((p: any) => ({
+            id: p.id,
+            sku: p.sku,
+            name: p.name,
+            quantity: p.quantity || 0,
+            ratePerPiece: p.ratePerPiece || 0,
+            category: p.productCategory || p.category || 'N/A',
+          }));
+          setInventoryItems(items);
+        }
+      } catch (error) {
+        console.warn('Could not fetch inventory from API, using localStorage.', error);
+        const savedProducts = localStorage.getItem('simpleInventoryProducts');
+        if (savedProducts) setInventoryItems(JSON.parse(savedProducts));
+      }
+    };
+
+    const fetchInventoryCategories = async () => {
+      try {
+        const response = await axios.get('inventory/categories', { withCredentials: true });
+        if (response.data && Array.isArray(response.data)) {
+          setInventoryCategories(['All', ...response.data]);
+        }
+      } catch (error) {
+        console.error('Error fetching inventory categories:', error);
+      }
+    };
+
+    loadDashboardData();
+    fetchInventoryCategories();
   }, []);
 
-  /** Dashboard overview */
-  const DashboardView = () => (
-    <div>
-      <h2>Dashboard Overview</h2>
-      <div className="stats-grid">
-        <div className="stat-card stat-blue">
-          <h3>Total Items</h3>
-          <p>{inventoryItems.length}</p>
-        </div>
-        <div className="stat-card stat-orange">
-          <h3>Total Value</h3>
-          <p>₹{totalValue.toFixed(2)}</p>
-        </div>
-        <div className="stat-card stat-green">
-          <h3>Today's Sales</h3>
-          <p>₹{todaySales.toFixed(2)}</p>
-        </div>
-        <div className="stat-card stat-red">
-          <h3>Low Stock Items</h3>
-          <p>{lowStockItems}</p>
-        </div>
-      </div>
+  useEffect(() => {
+    // This effect recalculates stats whenever inventoryItems changes.
+    if (inventoryItems.length > 0) {
+      const totalValue = inventoryItems.reduce((sum, item) => sum + (item.quantity * (item.ratePerPiece || 0)), 0);
+      const lowStockCount = inventoryItems.filter((item) => item.quantity < 10).length;
+      setStats({ totalItems: inventoryItems.length, totalValue, lowStockCount });
+    }
+  }, [inventoryItems]);
 
-      <div>
-        <h3>Recent Inventory Items</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>Name</th>
-              <th>Quantity</th>
-              <th>Price</th>
-              <th>Category</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inventoryItems.slice(0, 5).map((item) => (
-              <tr key={item.id}>
-                <td>{item.sku}</td>
-                <td>{item.name}</td>
-                <td>{item.quantity}</td>
-                <td>${item.price.toFixed(2)}</td>
-                <td>{item.category}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 
-  /** Inventory management view */
-  const InventoryView = () => (
-    <div>
-      <div className="header-row">
-        <h2>Inventory Management</h2>
-        <button className="button button-primary" onClick={() => setShowAddForm(true)}>
-          Add New Item
-        </button>
-      </div>
 
-      <div className="stats-grid">
-        <div className="stat-card stat-blue">
-          <h3>Total Items</h3>
-          <p>{inventoryItems.length}</p>
-        </div>
-        <div className="stat-card stat-orange">
-          <h3>Total Value</h3>
-          <p>₹{totalValue.toFixed(2)}</p>
-        </div>
-        <div className="stat-card stat-green">
-          <h3>Today's Sales</h3>
-          <p>₹{todaySales.toFixed(2)}</p>
-        </div>
-        <div className="stat-card stat-red">
-          <h3>Low Stock Items</h3>
-          <p>{lowStockItems}</p>
-        </div>
-      </div>
+  const filteredInventoryItems = useMemo(() => {
+    if (selectedInventoryCategory === 'All') {
+      return inventoryItems;
+    }
+    return inventoryItems.filter(item => item.category === selectedInventoryCategory);
+  }, [inventoryItems, selectedInventoryCategory]);
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>SKU</th>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Quantity</th>
-            <th>Price</th>
-            <th>Category</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {inventoryItems.map((item) => (
-            <tr key={item.id}>
-              <td>{item.sku}</td>
-              <td>{item.name}</td>
-              <td>{item.description}</td>
-              <td>{item.quantity}</td>
-              <td>${item.price.toFixed(2)}</td>
-              <td>{item.category}</td>
-              <td>
-                <button
-                  className="button button-destructive"
-                  onClick={() => handleDeleteItem(item.id)}
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  const salesInRange = useMemo(() => {
+    if (!invoices.length) return 0;
 
-      {showAddForm && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2>Add New Item</h2>
-            <div className="form-group">
-              <label>SKU *</label>
-              <input
-                className="input"
-                value={newItem.sku}
-                onChange={(e) =>
-                  setNewItem((prev) => ({ ...prev, sku: e.target.value }))
-                }
-              />
-            </div>
-            <div className="form-group">
-              <label>Name *</label>
-              <input
-                className="input"
-                value={newItem.name}
-                onChange={(e) =>
-                  setNewItem((prev) => ({ ...prev, name: e.target.value }))
-                }
-              />
-            </div>
-            <div className="form-group">
-              <label>Description</label>
-              <textarea
-                className="input"
-                value={newItem.description}
-                onChange={(e) =>
-                  setNewItem((prev) => ({ ...prev, description: e.target.value }))
-                }
-              />
-            </div>
-            <div className="form-group">
-              <label>Category *</label>
-              <input
-                className="input"
-                value={newItem.category}
-                onChange={(e) =>
-                  setNewItem((prev) => ({ ...prev, category: e.target.value }))
-                }
-              />
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Quantity</label>
-                <input
-                  className="input"
-                  type="number"
-                  value={newItem.quantity}
-                  onChange={(e) =>
-                    setNewItem((prev) => ({
-                      ...prev,
-                      quantity: parseInt(e.target.value) || 0,
-                    }))
-                  }
-                />
-              </div>
-              <div className="form-group">
-                <label>Price</label>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  value={newItem.price}
-                  onChange={(e) =>
-                    setNewItem((prev) => ({
-                      ...prev,
-                      price: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button
-                className="button button-secondary"
-                onClick={() => setShowAddForm(false)}
-              >
-                Cancel
-              </button>
-              <button className="button button-primary" onClick={handleAddItem}>
-                Add Item
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    const filteredInvoices = invoices.filter(invoice => {
+      if (!dateRange) {
+        // By default, show today's sales if no range is selected
+        const today = new Date().toDateString();
+        return new Date(invoice.date).toDateString() === today;
+      }
+      const invoiceDate = new Date(invoice.date);
+      return invoiceDate >= dateRange[0].startOf('day') && invoiceDate <= dateRange[1].endOf('day');
+    });
+
+    return filteredInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
+  }, [invoices, dateRange]);
+
+  const topProducts = useMemo(() => {
+    const productSales: Record<string, number> = {};
+    invoices.forEach(invoice => {
+      invoice.items.forEach(item => {
+        if (item.name) {
+          productSales[item.name] = (productSales[item.name] || 0) + (item.total || 0);
+        }
+      });
+    });
+    return Object.entries(productSales)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([name]) => name);
+  }, [invoices]);
+
+  const salesChartData = useMemo(() => {
+    const salesByPeriod: Record<string, Record<string, number>> = {};
+
+    invoices.forEach(invoice => {
+      const invoiceDate = new Date(invoice.date);
+      let periodKey: string;
+
+      switch (salesPeriod) {
+        case 'Yearly':
+          periodKey = `${invoiceDate.getFullYear()}`;
+          break;
+        case 'Quarterly':
+          const quarter = Math.floor(invoiceDate.getMonth() / 3) + 1;
+          periodKey = `${invoiceDate.getFullYear()}-Q${quarter}`;
+          break;
+        case 'Monthly':
+        default:
+          const month = (invoiceDate.getMonth() + 1).toString().padStart(2, '0');
+          periodKey = `${invoiceDate.getFullYear()}-${month}`;
+          break;
+      }
+
+      invoice.items.forEach(item => {
+        if (item.name && (selectedProduct === 'All' || selectedProduct === item.name)) {
+          const productName = selectedProduct === 'All' ? 'All Products' : item.name;
+          if (!salesByPeriod[periodKey]) {
+            salesByPeriod[periodKey] = {};
+          }
+          salesByPeriod[periodKey][productName] = (salesByPeriod[periodKey][productName] || 0) + (item.total || 0);
+        }
+      });
+    });
+
+    const chartData = Object.entries(salesByPeriod)
+      .flatMap(([period, productSales]) =>
+        Object.entries(productSales).map(([productName, sales]) => ({
+          period,
+          productName,
+          sales,
+        }))
+      )
+      .sort((a, b) => a.period.localeCompare(b.period));
+
+    // If 'All' is selected, we need to aggregate sales for 'All Products'
+    if (selectedProduct === 'All') {
+      // This logic is already handled by setting productName to 'All Products' above.
+      // The flatMap structure correctly creates separate series.
+    }
+
+    return chartData;
+  }, [invoices, salesPeriod, selectedProduct]);
+
+  const recentActivity = useMemo(() => {
+    return invoices
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5)
+      .map(invoice => ({
+        key: invoice.id,
+        activity: `Invoice #${invoice.invoiceNumber} created for ${invoice.customerName}`,
+        date: new Date(invoice.date).toLocaleDateString(),
+        amount: `$${invoice.total.toFixed(2)}`,
+      }));
+  }, [invoices]);
 
   return (
     <div className="dashboard-container">
-      <div className="header-row">
-        <div>
-          <h1>ErpSoul ERP System</h1>
-          <p className="text-muted-foreground">Welcome, {user.name}</p>
-        </div>
-        <button className="button button-destructive" onClick={onLogout}>
-          Logout
-        </button>
+      <Title level={2} className="dashboard-title">Welcome, {user.name}</Title>
+      
+      <div className="filter-bar">
+        <Space>
+          <RangePicker onChange={setDateRange} />
+        </Space>
       </div>
 
-      <div className="tabs">
-        <button
-          className={`tab ${activeTab === "dashboard" ? "active" : ""}`}
-          onClick={() => setActiveTab("dashboard")}
-        >
-          Dashboard
-        </button>
-        <button
-          className={`tab ${activeTab === "inventory" ? "active" : ""}`}
-          onClick={() => setActiveTab("inventory")}
-        >
-          Inventory Management
-        </button>
-      </div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} md={6}>
+          <Card className="stats-card">
+            <Statistic
+              title="Total Sales"
+              value={salesInRange}
+              precision={2}
+              prefix={<DollarOutlined />}
+              valueStyle={{ color: '#3f8600' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card className="stats-card">
+            <Statistic
+              title="Total Inventory Items"
+              value={stats.totalItems}
+              prefix={<ShoppingCartOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card className="stats-card">
+            <Statistic
+              title="Inventory Value"
+              value={stats.totalValue}
+              precision={2}
+              prefix={<DollarOutlined />}
+              valueStyle={{ color: '#faad14' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card className="stats-card">
+            <Statistic
+              title="Low Stock Items"
+              value={stats.lowStockCount}
+              prefix={<WarningOutlined />}
+              valueStyle={{ color: '#cf1322' }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-      {activeTab === "dashboard" && <DashboardView />}
-      {activeTab === "inventory" && <InventoryView />}
+      <Row gutter={[16, 16]} style={{ marginTop: '2rem' }}>
+        <Col xs={24} lg={16}>
+          <Card className="chart-card">
+            <Title level={4}>Sales Trends</Title>
+            <Space style={{ marginBottom: 16 }}>
+              <Radio.Group value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value)}>
+                <Radio.Button value="Monthly">Monthly</Radio.Button>
+                <Radio.Button value="Quarterly">Quarterly</Radio.Button>
+                <Radio.Button value="Yearly">Yearly</Radio.Button>
+              </Radio.Group>
+              <Select value={selectedProduct} onChange={setSelectedProduct} style={{ width: 200 }}>
+                <Option value="All">All Products</Option>
+                {topProducts.map(p => <Option key={p} value={p}>{p}</Option>)}
+              </Select>
+            </Space>
+            {salesChartData.length > 0 ? (
+              <SalesTrendChart data={salesChartData} />
+            ) : (
+              <Empty description="No sales data available for the selected period." />
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card className="chart-card">
+            <Title level={4}>Inventory by Category</Title>
+            <Select value={selectedInventoryCategory} onChange={setSelectedInventoryCategory} style={{ width: '100%', marginBottom: 16 }}>
+              {inventoryCategories.map(category => (
+                <Option key={category} value={category}>{category}</Option>
+              ))}
+            </Select>
+            {filteredInventoryItems.length > 0 ? (
+              <>
+                <Title level={5}>Product Count by Category</Title>
+                <InventoryCategoryChart inventoryItems={filteredInventoryItems} />
+                <Title level={5} style={{ marginTop: '1rem' }}>Product Sales Distribution</Title>
+                <ProductSalesPieChart 
+                  invoices={invoices} 
+                  inventoryItems={inventoryItems} 
+                  selectedCategory={selectedInventoryCategory} 
+                />
+              </>
+            ) : (
+              <Empty description="No inventory data available." />
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      <Row style={{ marginTop: '2rem' }}>
+        <Col span={24}>
+          <Card className="table-card">
+            <Title level={4}>Recent Activity</Title>
+            <Table
+              dataSource={recentActivity}
+              columns={[
+                { title: 'Activity', dataIndex: 'activity', key: 'activity' },
+                { title: 'Date', dataIndex: 'date', key: 'date' },
+                { title: 'Amount', dataIndex: 'amount', key: 'amount' },
+              ]}
+              pagination={false}
+            />
+          </Card>
+        </Col>
+      </Row>
     </div>
   );
 }

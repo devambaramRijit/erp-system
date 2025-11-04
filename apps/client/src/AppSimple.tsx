@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { checkServerHealth } from './services/config';
+
+// Set correct API URL
+axios.defaults.baseURL = 'http://localhost:3000/api';
 import { LoginForm } from './components/LoginForm';
 import { Dashboard } from './pages/Dashboard';
 import InventoryScreen from './InventoryScreen';
@@ -18,15 +22,23 @@ function App() {
     const checkAuth = async () => {
       try {
         setLoading(true);
+        
+        // Check if server is running
+        const serverIsRunning = await checkServerHealth();
+        if (!serverIsRunning) {
+          console.error('Cannot connect to server. Please check if the server is running.');
+          setLoading(false);
+          return;
+        }
 
         // First check if user is authenticated
-        const authResponse = await axios.get('/api/auth/me', { withCredentials: true });
+        const authResponse = await axios.get('/auth/me', { withCredentials: true });
         if (authResponse.data.user) {
           setUser(authResponse.data.user);
 
           // Then fetch app data (products and customers)
           try {
-            const appDataResponse = await axios.get('/api/auth/app-data', { withCredentials: true });
+            const appDataResponse = await axios.get('/auth/app-data', { withCredentials: true });
 
             // Store data in localStorage for offline access
             if (appDataResponse.data.products) {
@@ -45,14 +57,14 @@ function App() {
             // Try to fetch data directly from API endpoints if app-data fails
             try {
               // Fetch products directly
-              const productsResponse = await axios.get('/api/inventory', { withCredentials: true });
+              const productsResponse = await axios.get('/inventory', { withCredentials: true });
               if (productsResponse.data) {
                 localStorage.setItem('simpleInventoryProducts', JSON.stringify(productsResponse.data));
                 window.dispatchEvent(new CustomEvent('productsUpdated'));
               }
 
               // Fetch customers directly
-              const customersResponse = await axios.get('/api/customers', { withCredentials: true });
+              const customersResponse = await axios.get('/customers', { withCredentials: true });
               if (customersResponse.data) {
                 localStorage.setItem('customers', JSON.stringify(customersResponse.data));
                 window.dispatchEvent(new CustomEvent('customersUpdated'));
@@ -63,7 +75,9 @@ function App() {
           }
         }
       } catch (error) {
+        console.log('Authentication check failed:', error);
         setUser(null);
+        // Continue with app initialization even without authentication
       } finally {
         setLoading(false);
       }
@@ -104,7 +118,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/api/auth/logout', {}, { withCredentials: true });
+      await axios.post('/auth/logout', {}, { withCredentials: true });
       setUser(null);
 
       // Clear products and customers data from localStorage
@@ -249,6 +263,38 @@ function App() {
           Product List Tab
         </button>
         <button
+          onClick={() => setActiveTab('inventory-management')}
+          style={{
+            padding: activeTab === 'inventory-management' ? '16px 24px' : '6px 24px',
+            backgroundColor: activeTab === 'inventory-management' ? 'white' : '#f9f9f9',
+            border: activeTab === 'inventory-management' ? '1px solid #ddd' : '1px solid transparent',
+            borderBottom: activeTab === 'inventory-management' ? '2px solid white' : '1px solid transparent',
+            borderRadius: activeTab === 'inventory-management' ? '6px 6px 0 0' : '4px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'inventory-management' ? 'bold' : 'normal',
+            color: activeTab === 'inventory-management' ? '#333' : '#666',
+            boxShadow: activeTab === 'inventory-management' ? '0 -2px 4px rgba(0,0,0,0.1)' : 'none',
+            position: 'relative',
+            top: activeTab === 'inventory-management' ? '1px' : '0',
+            transition: 'all 0.2s ease',
+            zIndex: activeTab === 'inventory-management' ? '2' : '1'
+          }}
+          onMouseOver={(e) => {
+            if (activeTab !== 'inventory-management') {
+              e.currentTarget.style.backgroundColor = '#f1f1f1';
+              e.currentTarget.style.color = '#333';
+            }
+          }}
+          onMouseOut={(e) => {
+            if (activeTab !== 'inventory-management') {
+              e.currentTarget.style.backgroundColor = '#f9f9f9';
+              e.currentTarget.style.color = '#666';
+            }
+          }}
+        >
+          Inventory Management
+        </button>
+        <button
           onClick={() => setActiveTab('invoice')}
           style={{
             padding: activeTab === 'invoice' ? '16px 24px' : '6px 24px',
@@ -322,6 +368,7 @@ function App() {
       <div>
         {activeTab === 'dashboard' && <Dashboard user={user} onLogout={handleLogout} />}
         {activeTab === 'inventory' && <ProductManagementUpdated />}
+        {activeTab === 'inventory-management' && <InventoryScreen />}
         {activeTab === 'invoice' && <InvoiceNavigation />}
         {activeTab === 'customers' && <CustomerScreen />}
       </div>

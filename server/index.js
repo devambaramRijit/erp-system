@@ -18,7 +18,12 @@ const sessionStore = new SequelizeStore({
 });
 
 // Middleware
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.use(cors({ 
+  origin: ['http://localhost:5173', 'http://192.168.0.101:5173', 'http://192.168.0.107:5173'], 
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(session({
   secret: 'your-secret-key',
@@ -40,6 +45,7 @@ const authRoutes = require('./routes/auth');
 const invoiceRoutes = require('./routes/invoice');
 const inventoryRoutes = require('./routes/inventory');
 const customerRoutes = require('./routes/customer');
+const actionLogRoutes = require('./routes/actionLog');
 
 // Sync database models
 db.sequelize.sync({ force: false }).then(() => {
@@ -182,6 +188,11 @@ db.sequelize.sync({ force: false }).then(() => {
   });
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Server is running' });
+});
+
 // API routes
 app.get('/api', (req, res) => {
   res.json({ message: 'Welcome to ERP Soul API' });
@@ -193,6 +204,19 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/products', inventoryRoutes); // Alias for inventory routes
 app.use('/api/customers', customerRoutes);
+app.use('/api/action-logs', actionLogRoutes);
+
+// Debug: Log registered routes
+console.log('Registered customer routes:');
+const customerStack = customerRoutes.stack;
+for (const layer of customerStack) {
+  if (layer.route) {
+    const methods = Object.keys(layer.route.methods)
+      .filter(method => layer.route.methods[method])
+      .join(', ').toUpperCase();
+    console.log(`${methods} /api/customers${layer.route.path}`);
+  }
+}
 
 // Serve the React app for any other routes
 app.get('*', (req, res) => {
@@ -205,6 +229,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error', details: err.message });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`CORS enabled for: http://localhost:5173`);
+  console.log(`Customer routes available at: /api/customers`);
+  console.log(`Template download endpoint: /api/customers/download-template`);
 });

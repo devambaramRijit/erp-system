@@ -18,4 +18,7 @@ router.put('/:id', isAuthenticated, invoiceController.updateInvoice);
 // Delete invoice
 router.delete('/:id', isAuthenticated, invoiceController.deleteInvoice);
 
+// Finalize invoice
+router.put('/:id/finalize', isAuthenticated, invoiceController.finalizeInvoice);
+
 module.exports = router;

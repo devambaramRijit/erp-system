@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { checkServerHealth } from '../services/config';
+import './LoginForm.css'; // Import the CSS file
+
+// Set correct API URL
+axios.defaults.baseURL = 'http://localhost:3000/api';
 
 export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], customers?: any[]) => void }) {
   const [email, setEmail] = useState('');
@@ -11,15 +16,31 @@ export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], 
     e.preventDefault();
     setLoading(true);
     setError('');
+    
+    // Check if server is running
+    const serverIsRunning = await checkServerHealth();
+    if (!serverIsRunning) {
+      setError('Cannot connect to server. Please check if the server is running at http://localhost:3000');
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await axios.post(
-        '/api/auth/login',
+        "/auth/login",
         { email, password },
         { withCredentials: true }
       );
 
       if (res.data.user) {
+        // Store token in localStorage
+        if (res.data.token) {
+          localStorage.setItem('token', res.data.token);
+        }
+        onLogin(res.data.user, res.data.products, res.data.customers);
+      } else if (res.data.message === 'Login successful' && res.data.token) {
+        // Handle case where user info might be nested differently
+        localStorage.setItem('token', res.data.token);
         onLogin(res.data.user, res.data.products, res.data.customers);
       } else {
         setError('Login failed: No user data returned');
@@ -53,57 +74,32 @@ export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], 
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ 
-      maxWidth: 320, 
-      margin: '2rem auto', 
-      padding: 24, 
-      border: '1px solid #eee', 
-      borderRadius: 8,
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    }}>
-      <h2 style={{ textAlign: 'center', marginBottom: 20 }}>Login to ErpSoul</h2>
+    <form onSubmit={handleSubmit} className="login-form-container">
+      <h2 className="login-form-title">Login to ErpSoul</h2>
 
-      <div style={{ marginBottom: 12 }}>
+      <div className="input-group">
         <input
           type="email"
           placeholder="Email"
           value={email}
           onChange={e => setEmail(e.target.value)}
           required
-          style={{ 
-            width: '100%', 
-            padding: 10, 
-            marginBottom: 12,
-            border: '1px solid #ddd',
-            borderRadius: 4,
-            boxSizing: 'border-box'
-          }}
+          className="login-input"
         />
+      </div>
+      <div className="input-group">
         <input
           type="password"
           placeholder="Password"
           value={password}
           onChange={e => setPassword(e.target.value)}
           required
-          style={{ 
-            width: '100%', 
-            padding: 10,
-            border: '1px solid #ddd',
-            borderRadius: 4,
-            boxSizing: 'border-box'
-          }}
+          className="login-input"
         />
       </div>
 
       {error && (
-        <div style={{ 
-          color: 'red', 
-          marginBottom: 12, 
-          padding: 8, 
-          backgroundColor: '#ffeeee',
-          borderRadius: 4,
-          border: '1px solid #ffcccc'
-        }}>
+        <div className="error-message">
           {error}
         </div>
       )}
@@ -111,22 +107,12 @@ export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], 
       <button 
         type="submit" 
         disabled={loading} 
-        style={{ 
-          width: '100%', 
-          padding: 12,
-          backgroundColor: loading ? '#cccccc' : '#007bff',
-          color: 'white',
-          border: 'none',
-          borderRadius: 4,
-          cursor: loading ? 'not-allowed' : 'pointer',
-          fontSize: 16,
-          fontWeight: 'bold'
-        }}
+        className="login-button"
       >
         {loading ? 'Logging in...' : 'Login'}
       </button>
 
-      <div style={{ marginTop: 20, textAlign: 'center', fontSize: '0.9em', color: '#666' }}>
+      <div className="demo-credentials">
         <p>Demo credentials:</p>
         <p>Admin: admin@example.com / admin123</p>
         <p>User: user@example.com / user123</p>

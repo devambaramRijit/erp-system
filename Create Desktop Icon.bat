@@ -29,7 +29,7 @@ echo Set objShell = CreateObject("WScript.Shell") > %SCRIPT%
 echo Set objShortcut = objShell.CreateShortcut("%SHORTCUT%") >> %SCRIPT%
 echo objShortcut.TargetPath = "%~dp0Run ERP Soul.bat" >> %SCRIPT%
 echo objShortcut.WorkingDirectory = "%~dp0" >> %SCRIPT%
-echo objShortcut.IconLocation = "%SystemRoot%\System32\shell32.dll,14" >> %SCRIPT%
+echo objShortcut.IconLocation = "%~dp0icon.ico" >> %SCRIPT%
 echo objShortcut.Save >> %SCRIPT%
 
 REM Execute the VBScript
