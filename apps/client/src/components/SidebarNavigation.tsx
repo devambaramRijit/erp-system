@@ -21,10 +21,13 @@ import {
   ImportOutlined,
   ExportOutlined,
   UserAddOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  BgColorsOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { colors, spacing, borderRadius } from '../styles/DesignSystem';
+import ThemeSwitcher from './ThemeSwitcher';
 
 const { Header, Sider } = Layout;
 const { Text } = Typography;
@@ -37,10 +40,11 @@ interface SidebarNavigationProps {
     role: string;
   };
   onLogout: () => void;
+  collapsed: boolean;
+  onCollapse: (collapsed: boolean) => void;
 }
 
-const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout }) => {
-  const [collapsed, setCollapsed] = useState(false);
+const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout, collapsed, onCollapse }) => {
   const [mobileDrawerVisible, setMobileDrawerVisible] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,10 +52,22 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
   // Get the current path to determine active menu item
   const getSelectedKey = () => {
     const path = location.pathname;
-    if (path.includes('dashboard')) return 'dashboard';
-    if (path.includes('inventory')) return 'inventory';
-    if (path.includes('invoice')) return 'invoice';
-    if (path.includes('customers')) return 'customers';
+    if (path === '/dashboard') return 'dashboard';
+    if (path === '/inventory') return 'inventory-list';
+    if (path === '/inventory-management') return 'inventory-management';
+    if (path === '/inventory-history') return 'inventory-history';
+    if (path === '/invoice') return 'invoice-generation';
+    if (path === '/invoice-history') return 'invoice-list';
+    if (path === '/customers') return 'customer-list';
+    if (path === '/customers/add') return 'add-customer';
+    if (path === '/customers/import') return 'import-customers';
+    if (path === '/customers/export') return 'export-customers';
+    if (path === '/reports') return 'sales-report';
+    if (path === '/reports/inventory') return 'inventory-report';
+    if (path === '/reports/expenses') return 'expenses-report';
+    if (path === '/employees') return 'employees';
+    if (path === '/expenses') return 'expenses';
+    if (path === '/settings') return 'settings';
     return 'dashboard';
   };
 
@@ -85,6 +101,15 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
           label: 'Inventory Management',
           onClick: () => {
             navigate('/inventory-management');
+            setMobileDrawerVisible(false);
+          },
+        },
+        {
+          key: 'inventory-history',
+          icon: <HistoryOutlined />,
+          label: 'Inventory History',
+          onClick: () => {
+            navigate('/inventory-history');
             setMobileDrawerVisible(false);
           },
         },
@@ -158,6 +183,67 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
         },
       ],
     },
+    {
+      key: 'reports',
+      icon: <BarChartOutlined />,
+      label: 'Reports',
+      children: [
+        {
+          key: 'sales-report',
+          icon: <BarChartOutlined />,
+          label: 'Sales Report',
+          onClick: () => {
+            navigate('/reports');
+            setMobileDrawerVisible(false);
+          },
+        },
+        {
+          key: 'inventory-report',
+          icon: <InboxOutlined />,
+          label: 'Inventory Report',
+          onClick: () => {
+            navigate('/reports/inventory');
+            setMobileDrawerVisible(false);
+          },
+        },
+        {
+          key: 'expenses-report',
+          icon: <ShoppingCartOutlined />,
+          label: 'Expenses Report',
+          onClick: () => {
+            navigate('/reports/expenses');
+            setMobileDrawerVisible(false);
+          },
+        },
+      ],
+    },
+    {
+      key: 'employees',
+      icon: <TeamOutlined />,
+      label: 'Employees',
+      onClick: () => {
+        navigate('/employees');
+        setMobileDrawerVisible(false);
+      },
+    },
+    {
+      key: 'expenses',
+      icon: <ShoppingCartOutlined />,
+      label: 'Expenses',
+      onClick: () => {
+        navigate('/expenses');
+        setMobileDrawerVisible(false);
+      },
+    },
+    {
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: 'Settings',
+      onClick: () => {
+        navigate('/settings');
+        setMobileDrawerVisible(false);
+      },
+    },
   ];
 
   const userMenuItems = [
@@ -170,6 +256,14 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
       key: 'settings',
       icon: <SettingOutlined />,
       label: 'Settings',
+      onClick: () => {
+        navigate('/settings');
+      },
+    },
+    {
+      key: 'theme-switcher',
+      icon: <BgColorsOutlined />,
+      label: <ThemeSwitcher />,
     },
     {
       type: 'divider',
@@ -228,8 +322,9 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
       </div>
       <Menu
         theme="dark"
-        mode="inline"
+        mode="vertical"
         selectedKeys={[getSelectedKey()]}
+        defaultOpenKeys={['inventory', 'invoice', 'customers', 'reports']}
         items={menuItems}
         style={{ 
           borderRight: 0,
@@ -255,7 +350,7 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
           <Button
             type="text"
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => onCollapse(!collapsed)}
             style={{ 
               color: 'white',
               fontSize: '16px',
@@ -284,14 +379,12 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
           bottom: 0,
           backgroundColor: colors.secondary[800],
           boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
-          display: 'none',
         }}
         className="desktop-sidebar"
         breakpoint="lg"
+        collapsedWidth="80"
         onBreakpoint={(broken) => {
-          if (broken) {
-            setCollapsed(true);
-          }
+          onCollapse(broken);
         }}
       >
         {renderSidebar()}
@@ -299,16 +392,20 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
 
       {/* Mobile Header */}
       <Header style={{ 
-        padding: '0 16px', 
+        padding: `0 ${spacing[4]}`, 
         background: 'white',
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        position: 'sticky',
+        position: 'fixed',
         top: 0,
-        zIndex: 1,
-      }}>
+        left: 0,
+        right: 0,
+        zIndex: 10,
+      }}
+      className="mobile-header"
+      >
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <Button
             type="text"
@@ -323,7 +420,10 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
             className="mobile-menu-button"
           />
           <Text style={{ fontSize: '18px', fontWeight: 'bold' }}>
-            {menuItems.find(item => item.key === getSelectedKey())?.label || 'Dashboard'}
+            {
+              menuItems.flatMap(item => (item.children ? item.children : item))
+                       .find(item => item.key === getSelectedKey())?.label || 'Dashboard'
+            }
           </Text>
         </div>
         <Space size="large">
@@ -345,11 +445,15 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
               cursor: 'pointer',
               padding: spacing[1],
               borderRadius: borderRadius.full,
-            }}>
+              transition: 'background-color 0.3s',
+            }}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = colors.gray[100]}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
               <Avatar style={{ backgroundColor: colors.primary[500] }} icon={<UserOutlined />} />
-              <div style={{ marginLeft: spacing[2] }}>
-                <Text style={{ display: 'block', fontWeight: 'bold' }}>{user.name}</Text>
-                <Text type="secondary" style={{ fontSize: '12px' }}>{user.role}</Text>
+              <div style={{ marginLeft: spacing[2], display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <Text style={{ fontWeight: 'bold', lineHeight: 1.2 }}>{user.name}</Text>
+                <Text type="secondary" style={{ fontSize: '12px', lineHeight: 1.2 }}>{user.role}</Text>
               </div>
             </div>
           </Dropdown>
@@ -368,23 +472,6 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ user, onLogout })
       >
         {renderSidebar(true)}
       </Drawer>
-
-      {/* Responsive Styles */}
-      <style jsx>{`
-        @media (min-width: 992px) {
-          .desktop-sidebar {
-            display: block !important;
-          }
-          .mobile-menu-button {
-            display: none !important;
-          }
-        }
-        @media (max-width: 991px) {
-          .desktop-sidebar {
-            display: none !important;
-          }
-        }
-      `}</style>
     </>
   );
 };

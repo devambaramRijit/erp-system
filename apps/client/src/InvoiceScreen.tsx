@@ -1,23 +1,17 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, Form, Input, Select, Table, InputNumber, Modal, message, Card, Row, Col, Divider, Space, Popconfirm, AutoComplete } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, SaveOutlined, LockOutlined, CopyOutlined, DownloadOutlined, HistoryOutlined } from '@ant-design/icons';
+import { Button, Form, Input, Select, Table, InputNumber, Modal, message, Card, Row, Col, Divider, Space, Popconfirm, AutoComplete, DatePicker } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, SaveOutlined, LockOutlined, CopyOutlined, HistoryOutlined } from '@ant-design/icons';
+import moment from 'moment';
 import InvoiceActionLog from './components/InvoiceActionLog';
 import { useReactToPrint } from 'react-to-print';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { CustomerData } from './services/mockApi';
 import { api } from './lib/api';
-// Set the correct API URL
-// API URL is configured in lib/api.ts
 import ProductDetailsSection from './ProductDetailsSection';
 import ProductForm from './ProductForm';
-import ProductFormComponent from './components/ProductForm';
-import axios from 'axios';
-
-// Set correct API URL
-axios.defaults.baseURL = 'http://localhost:3000/api';
-
+import InvoicePreview from './components/InvoicePreview';
 import './InvoiceScreen.css';
+import './components/InvoicePreview.css';
 
 // Add custom styles for the product dropdown
 const productDropdownStyles = `
@@ -72,16 +66,14 @@ interface Product {
   id: string;
   sku: string;
   name: string;
-  size?: string;
-  unit?: string;
+  size: string;
+  unit: string;
   quantity: number;
   price: number;
   productType: string;
   category?: string;
   ratePerPiece?: number;
   ratePerInch?: number;
-  costPricePerInch?: number;
-  costPricePerPiece?: number;
 }
 
 interface InvoiceItem {
@@ -97,7 +89,6 @@ interface InvoiceItem {
   size?: number;
   cpPerPc?: number;
   rate?: number;
-  pricePerInch?: number;
 }
 
 interface Invoice {
@@ -121,7 +112,6 @@ interface Invoice {
   notesLine2?: string;
   notesLine3?: string;
   isFinalized?: boolean;
-  discountType?: 'percentage' | 'decimal';
 }
 
 const InvoiceScreen: React.FC = () => {
@@ -129,6 +119,8 @@ const InvoiceScreen: React.FC = () => {
   const [itemForm] = Form.useForm();
   const [customerForm] = Form.useForm();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
+  const [dateRange, setDateRange] = useState<[string | null, string | null]>([null, null]);
   const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productTypes, setProductTypes] = useState<string[]>(() => {
@@ -150,15 +142,84 @@ const InvoiceScreen: React.FC = () => {
   const [showRateField, setShowRateField] = useState(true);
   const [selectedProductCategory, setSelectedProductCategory] = useState<string>('');
   const [showProductForm, setShowProductForm] = useState<boolean>(false);
-  const [showAddProductModal, setShowAddProductModal] = useState<boolean>(false);
-  const [productForm] = Form.useForm();
-  const [loadingNewProduct, setLoadingNewProduct] = useState<boolean>(false);
   const [actionLogVisible, setActionLogVisible] = useState<boolean>(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedInvoiceNumber, setSelectedInvoiceNumber] = useState<string | null>(null);
+  const [showDuplicateButton, setShowDuplicateButton] = useState(() => {
+    const saved = localStorage.getItem('uiSettings');
+    return saved ? JSON.parse(saved).showDuplicateButton : true; // Default to true
+  });
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [previewClearedAfterDeletion, setPreviewClearedAfterDeletion] = useState(false);
+  const [printSelectedVisible, setPrintSelectedVisible] = useState(false);
+  const [viewSelectedLogsVisible, setViewSelectedLogsVisible] = useState(false);
+  const [selectedActionLogs, setSelectedActionLogs] = useState<any[]>([]);
+  const printSelectedRef = useRef<HTMLDivElement>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const [pincodeData, setPincodeData] = useState<any[]>([]);
 
-  // Load current invoice from localStorage on component mount
+  useEffect(() => {
+    fetch('/pincodes.json')
+      .then((response) => response.json())
+      .then((data) => setPincodeData(data))
+      .catch((error) => console.error('Error loading pincode data:', error));
+  }, []);
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+        const saved = localStorage.getItem('uiSettings');
+        const newShowFlag = saved ? JSON.parse(saved).showDuplicateButton : true;
+        setShowDuplicateButton(newShowFlag);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+        window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  const logAction = async (action: string, invoiceId: string, invoiceNumber: string, details: string = '') => {
+    try {
+      const logs = JSON.parse(localStorage.getItem('action_logs') || '[]');
+      const newLog = {
+        id: Date.now().toString(),
+        invoiceId,
+        invoiceNumber,
+        action,
+        details,
+        timestamp: new Date().toISOString(),
+        // In a real app, user ID and name would be sourced from auth context
+        userId: 1, // Placeholder
+        username: 'System Admin' // Placeholder
+      };
+      logs.push(newLog);
+      localStorage.setItem('action_logs', JSON.stringify(logs));
+    } catch (error) {
+      console.error('Failed to log action to localStorage:', error);
+      // Silently fail for now
+    }
+  };
+
+  // Helper function to sort invoices by invoiceNumber
+  const sortInvoices = (invoiceArray: Invoice[]): Invoice[] => {
+    // Extract numeric part from invoice numbers for proper numerical sorting
+    const extractNumericPart = (invoiceNumber: string) => {
+      const match = invoiceNumber.match(/_(\d+)$/);
+      return match ? parseInt(match[1], 10) : 0;
+    };
+    
+    return [...invoiceArray].sort((a, b) => {
+      const numA = extractNumericPart(a.invoiceNumber);
+      const numB = extractNumericPart(b.invoiceNumber);
+      
+      if (numA === numB) {
+        return a.invoiceNumber.localeCompare(b.invoiceNumber); // Fallback to alphanumeric for tie-breaking
+      }
+      return numA - numB;
+    });
+  };
+
   React.useEffect(() => {
     const savedCurrentInvoice = localStorage.getItem('currentInvoice');
     if (savedCurrentInvoice) {
@@ -172,18 +233,18 @@ const InvoiceScreen: React.FC = () => {
     }
 
     // Load invoices from localStorage
-        const savedInvoices = localStorage.getItem('invoices');
+    const savedInvoices = localStorage.getItem('invoices');
     console.log('Raw invoices from localStorage:', savedInvoices);
     
-        if (savedInvoices) {
-          try {
-            const parsedInvoices = JSON.parse(savedInvoices);
+    if (savedInvoices) {
+      try {
+        const parsedInvoices = JSON.parse(savedInvoices);
         console.log('Parsed invoices from localStorage:', parsedInvoices);
         console.log('Number of invoices:', parsedInvoices.length);
         
         // Only update state if we have valid invoices
-            if (Array.isArray(parsedInvoices)) {
-          setInvoices(parsedInvoices);
+        if (Array.isArray(parsedInvoices)) {
+          setInvoices(sortInvoices(parsedInvoices));
           console.log('Successfully set invoices in state');
         } else {
           console.log('Invalid invoices format in localStorage');
@@ -207,23 +268,43 @@ const InvoiceScreen: React.FC = () => {
     }
   }, []);
 
+  React.useEffect(() => {
+    if (dateRange[0] && dateRange[1]) {
+      const [startDate, endDate] = dateRange;
+      const filtered = invoices.filter(invoice => {
+        const invoiceDate = new Date(invoice.date);
+        return invoiceDate >= new Date(startDate) && invoiceDate <= new Date(endDate);
+      });
+      setFilteredInvoices(filtered);
+    } else {
+      setFilteredInvoices(invoices);
+    }
+  }, [dateRange, invoices]);
+
   // Save current invoice to localStorage whenever it changes
   React.useEffect(() => {
     if (currentInvoice) {
       localStorage.setItem('currentInvoice', JSON.stringify(currentInvoice));
+    } else {
+      localStorage.removeItem('currentInvoice');
     }
   }, [currentInvoice]);
 
-  // Update rate for any Base products
+  // Update rate for Laddu Gopal Base, RK Base, Mata Rani Base, Ganesh Lakshmi Base and Shyam Baba Base products
   React.useEffect(() => {
-    if (selectedProductCategory && selectedProductCategory.toLowerCase().includes('base') && 
+    const upperCategory = selectedProductCategory.toUpperCase();
+    if ((upperCategory === 'LADDU GOPAL BASE' || 
+         upperCategory === 'RK BASE' || 
+         upperCategory === 'MATA RANI BASE' ||
+         upperCategory === 'GANESH LAKSHMI BASE' ||
+         upperCategory === 'SHYAM BABA BASE') && 
         currentInvoice?.invoiceType === 'manufactured' && 
         itemForm) {
       const ratePerInch = itemForm.getFieldValue('ratePerInch') || 0;
       const size = itemForm.getFieldValue('size') || 0;
       const rate = ratePerInch * size;
       
-      console.log('useEffect updating rate for Base product:', { ratePerInch, size, rate, productCategory: selectedProductCategory });
+      console.log('useEffect updating rate:', { ratePerInch, size, rate });
       
       if (rate !== itemForm.getFieldValue('rate')) {
         itemForm.setFieldsValue({ rate });
@@ -255,7 +336,7 @@ const InvoiceScreen: React.FC = () => {
         
         // Only update state if we have valid invoices
         if (Array.isArray(parsedInvoices) && parsedInvoices.length > 0) {
-          setInvoices(parsedInvoices);
+          setInvoices(sortInvoices(parsedInvoices));
           console.log('Successfully set invoices in state');
         } else {
           console.log('No valid invoices found in localStorage');
@@ -268,82 +349,115 @@ const InvoiceScreen: React.FC = () => {
     }
   }, []);
 
-  // Sample data
-  React.useEffect(() => {
-    // Load customers from API first, then fallback to localStorage
-    const loadCustomers = async () => {
+  // Load customers from localStorage and update on changes
+  useEffect(() => {
+    const loadCustomers = () => {
       try {
-        const customersResponse = await api.get('/customers');
-        console.log('Raw customers response from API:', customersResponse);
-        if (Array.isArray(customersResponse)) {
-          setCustomers(customersResponse);
-          localStorage.setItem('customers', JSON.stringify(customersResponse));
-        }
-      } catch (error) {
-        console.error('Error fetching customers from API:', error);
-        // Fallback to localStorage if API fails
         const savedCustomers = localStorage.getItem('customers');
         if (savedCustomers) {
-          try {
-            const customersData = JSON.parse(savedCustomers);
-            setCustomers(customersData);
-          } catch (parseError) {
-            console.error('Error parsing saved customers:', parseError);
+          const customersData = JSON.parse(savedCustomers);
+          if (Array.isArray(customersData)) {
+            const formattedCustomers = customersData.map((customer: any) => ({
+              id: customer.id,
+              // Normalize data from both CustomerScreen (name, phone) and old InvoiceScreen (customerName, mobileNumber1)
+              customerName: customer.name || customer.customerName || '',
+              mobileNumber1: customer.phone || customer.mobileNumber1 || '',
+              mobileNumber2: customer.mobileNumber2 || '',
+              email: customer.email || '',
+              // Address fields can also be inconsistent
+              houseNumber: customer.houseNumber || '',
+              address: customer.address || '',
+              city: customer.city || '',
+              district: customer.district || '',
+              state: customer.state || '',
+              pinCode: customer.pinCode || customer.postalCode || '',
+              landmark: customer.landmark || '',
+              source: customer.source || ''
+            }));
+            setCustomers(formattedCustomers);
+          } else {
+            console.warn("Customers data in localStorage is not an array.");
             setCustomers([]);
           }
         } else {
           setCustomers([]);
         }
+      } catch (error) {
+        console.error('Error loading or parsing customers from localStorage:', error);
+        setCustomers([]);
       }
     };
-    
+
     loadCustomers();
 
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'customers') {
+        loadCustomers();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  // Sample data
+  React.useEffect(() => {
     // Load products from localStorage first, then fallback to API
     const loadProducts = async () => {
       try {
         // First try to get products from localStorage
-      const savedProducts = localStorage.getItem('simpleInventoryProducts');
-      if (savedProducts) {
+        const savedProducts = localStorage.getItem('erp_inventory');
+        if (savedProducts) {
           const parsedProducts = JSON.parse(savedProducts);
           // Transform the data to match our Product interface
-          const transformedProducts = parsedProducts.map((item: any) => ({
-            id: item.id,
-            sku: item.sku,
-            name: item.name,
-            size: item.size || 0,
-            unit: item.unit || 'pcs',
-            quantity: item.quantity || 0,
-            price: item.ratePerPiece || 0, // Use ratePerPiece as price
-            productType: item.productType || 'Traded',
-            category: item.productCategory || 'General',
-            costPricePerInch: item.costPricePerInch,
-            ratePerInch: item.ratePerInch
-          }));
+          const transformedProducts = parsedProducts.map((item: any) => {
+            const category = item.productCategory || 'General';
+            const inferredProductType = category.toUpperCase().includes('BASE') ? 'Manufactured' : 'Traded';
+            return {
+              id: item.id,
+              sku: item.sku,
+              name: item.name,
+              size: item.size || 0,
+              unit: item.unit || 'pcs',
+              quantity: item.quantity || 0,
+              price: item.ratePerPiece || 0, // Use ratePerPiece as price
+              productType: item.productType || inferredProductType,
+              category: category,
+              costPricePerInch: item.costPricePerInch,
+              ratePerInch: item.ratePerInch
+            };
+          });
           setProducts(transformedProducts);
         } else {
           // Fallback to API if no products in localStorage
-          const productsResponse = await api.get('/inventory') as any[];
+          const productsResponse = await api.get('/inventory');
           // Transform the data to match our Product interface
-          const transformedProducts = productsResponse.map((item: any) => ({
-            id: item.id,
-            sku: item.sku,
-            name: item.name,
-            size: item.size || 0,
-            unit: item.unit || 'pcs',
-            quantity: item.quantity || 0,
-            price: item.price || 0,
-            productType: item.productType || (item.category && (item.category.includes('Manufactured') || item.category.includes('Laddu Gopal')) ? 'Manufactured' : 'Traded'),
-            category: item.category || 'General',
-            costPricePerInch: item.costPricePerInch,
-            ratePerInch: item.ratePerInch
-          }));
+          const transformedProducts = productsResponse.map((item: any) => {
+            const category = item.category || 'General';
+            const inferredProductType = category.toUpperCase().includes('BASE') ? 'Manufactured' : 'Traded';
+            return {
+              id: item.id,
+              sku: item.sku,
+              name: item.name,
+              size: item.size || 0,
+              unit: item.unit || 'pcs',
+              quantity: item.quantity || 0,
+              price: item.price || 0,
+              productType: item.productType || inferredProductType,
+              category: category,
+              costPricePerInch: item.costPricePerInch,
+              ratePerInch: item.ratePerInch
+            };
+          });
           setProducts(transformedProducts);
         }
-        } catch (error) {
-          console.error('Error loading products:', error);
+      } catch (error) {
+        console.error('Error loading products:', error);
         // No fallback to mock products
-          setProducts([]);
+        setProducts([]);
       }
     };
     
@@ -375,135 +489,16 @@ useEffect(() => {
 
   const handlePrint = useReactToPrint({
     contentRef: invoiceRef,
-    documentTitle: currentInvoice ? (() => {
-      // Extract day and month from the invoice date
-      const date = new Date(currentInvoice.date);
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
-      
-      // Get current business year (April 1 to March 31)
-      const currentDate = new Date();
-      const currentYear = currentDate.getFullYear();
-      const businessYearStart = new Date(currentYear, 3, 1); // April 1
-      const businessYearEnd = new Date(currentYear + 1, 2, 31); // March 31 of next year
-      
-      let businessYear;
-      if (currentDate >= businessYearStart && currentDate <= businessYearEnd) {
-        businessYear = `${currentYear}-${(currentYear + 1).toString().slice(-2)}`;
-      } else {
-        businessYear = `${currentYear - 1}-${currentYear.toString().slice(-2)}`;
-      }
-      
-      // Clean customer name but keep spaces
-      const customerName = currentInvoice.customerName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-      
-      // Extract only the 3-digit number from the invoice number
-      const invoiceNumberMatch = currentInvoice.invoiceNumber.match(/\d{3}/);
-      const invoiceNumber = invoiceNumberMatch ? invoiceNumberMatch[0] : '000';
-      
-      // Format the filename as INV_PK_DAY-MONTH_BUSINESSYEAR_INVOICENUMBER__CUSTOMERNAME_
-      return `INV_PK_${day}-${month}_${businessYear}_${invoiceNumber}__${customerName}_`;
-    })() : 'Invoice',
+    documentTitle: currentInvoice ? `Invoice_${currentInvoice.invoiceNumber}` : 'Invoice',
     onPrintError: (errorLocation) => {
       console.error('Error printing:', errorLocation);
       message.error('Failed to print invoice');
     }
   });
 
-  const handleDownloadPDF = async (record: Invoice) => {
-    try {
-      // Set the current invoice
-      setCurrentInvoice(record);
-      
-      // Wait for the component to update
-      setTimeout(async () => {
-        if (!invoiceRef.current) {
-          message.error('Error preparing invoice for download');
-          return;
-        }
-
-        // Show loading message
-        const loadingMessage = message.loading('Generating PDF, please wait...', 0);
-
-        try {
-          // Use html2canvas to capture the invoice element
-          const canvas = await html2canvas(invoiceRef.current, {
-            scale: 2, // Higher scale for better quality
-            useCORS: true,
-            allowTaint: true,
-          });
-
-          // Create a PDF with jsPDF
-          const imgData = canvas.toDataURL('image/png');
-          const pdf = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4',
-          });
-
-          // Calculate dimensions to fit the image in the PDF
-          const imgWidth = 210; // A4 width in mm
-          const pageHeight = 297; // A4 height in mm
-          const imgHeight = (canvas.height * imgWidth) / canvas.width;
-          let heightLeft = imgHeight;
-          let position = 0;
-
-          // Add the image to the PDF
-          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-
-          // Add new pages if the content is longer than one page
-          while (heightLeft >= 0) {
-            position = heightLeft - imgHeight;
-            pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
-          }
-
-          // Generate filename
-          const date = new Date(record.date);
-          const month = (date.getMonth() + 1).toString().padStart(2, '0');
-          const day = date.getDate().toString().padStart(2, '0');
-          
-          // Get current business year (April 1 to March 31)
-          const currentDate = new Date();
-          const currentYear = currentDate.getFullYear();
-          const businessYearStart = new Date(currentYear, 3, 1); // April 1
-          const businessYearEnd = new Date(currentYear + 1, 2, 31); // March 31 of next year
-          
-          let businessYear;
-          if (currentDate >= businessYearStart && currentDate <= businessYearEnd) {
-            businessYear = `${currentYear}-${(currentYear + 1).toString().slice(-2)}`;
-          } else {
-            businessYear = `${currentYear - 1}-${currentYear.toString().slice(-2)}`;
-          }
-          
-          // Clean customer name but keep spaces
-          const customerName = record.customerName.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-          
-          // Extract only the 3-digit number from the invoice number
-          const invoiceNumberMatch = record.invoiceNumber.match(/\d{3}/);
-          const invoiceNumber = invoiceNumberMatch ? invoiceNumberMatch[0] : '000';
-          
-          const filename = `INV_PK_${day}-${month}_${businessYear}_${invoiceNumber}__${customerName}_.pdf`;
-
-          // Save the PDF
-          pdf.save(filename);
-
-          // Hide loading message
-          loadingMessage();
-          message.success('PDF downloaded successfully');
-        } catch (error) {
-          console.error('Error generating PDF:', error);
-          loadingMessage();
-          message.error('Failed to generate PDF');
-        }
-      }, 300);
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      message.error('Failed to download PDF');
-    }
-  };
+  const handlePrintSelectedInvoices = useReactToPrint({
+    content: () => printSelectedRef.current,
+  });
 
   const handlePrintAddress = (invoice: Invoice) => {
     // Get customer data
@@ -555,21 +550,19 @@ useEffect(() => {
             <div class="address-title"><strong>TO</strong></div>
             <div class="address-details"><strong> ${invoice.customerName}</strong></div>
             ${customer ? `
-              <div class="address-details">${customer.houseNumber || ''}, ${customer.city || ''}, ${customer.district || ''}, ${customer.state || ''}</div>
-              ${customer.pinCode ? `<div class="address-details"><strong>PIN:</strong> ${customer.pinCode}</div>` : ''}
+              <div class="address-details">${[customer.address, customer.houseNumber].filter(Boolean).join(', ')}</div>
+              <div class="address-details">${[customer.city, customer.district].filter(Boolean).join(', ')}</div>
+              <div class="address-details">${[customer.state, customer.pinCode].filter(Boolean).join(' - ')}</div>
+              ${customer.landmark ? `<div class="address-details">Landmark: ${customer.landmark}</div>` : ''}
               <div class="address-details"><strong>Mobile:</strong> ${customer.mobileNumber1 || ''} ${customer.mobileNumber2 ? ', ' + customer.mobileNumber2 : ''}</div>
             ` : '<div class="address-details">No customer details available</div>'}
           </div>
-          
           <div class="address-section">
             <div class="address-title"><strong>FROM</strong></div>
-            <div class="address-details"><strong> Pooja Kreations </strong></div>
-            <div class="address-details">Cinema Hall Road,</div> 
-            <div>Durgapur,</div>
-            <div>West Bengal</div>
-            <div>(near Shiv Mandir)</div>
-            <div class="address-details"><strong>PIN:</strong> 713201</div>
-            <div class="address-details"><strong>Phone:</strong> 9749928722 </div>
+            <div class="address-details"><strong>POOJA KREATIONS</strong></div>
+            <div class="address-details">Cinema Hall Road, near Shiv Temple, Industrial Area,</div>
+            <div class="address-details">Durgapur, West Bengal 713201</div>
+            <div class="address-details"><strong>CONTACT NO.:</strong> 96145 22527</div>
           </div>
         </div>
       </body>
@@ -590,82 +583,66 @@ useEffect(() => {
     }, 1000);
   };
 
-  // Handles Adding Invoice to the
-  const handleAddInvoice = async () => {
+  const generateInvoiceNumber = () => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // January is 0
+
+    // Financial year calculation
+    let financialYearStart, financialYearEnd;
+    if (currentMonth >= 4) { // April or later
+      financialYearStart = currentYear;
+      financialYearEnd = currentYear + 1;
+    } else { // January to March
+      financialYearStart = currentYear - 1;
+      financialYearEnd = currentYear;
+    }
+    
+    // Special case: Change to 26-27 format starting from April 1, 2026
+    const targetDate = new Date(2026, 3, 1); // April 1, 2026 (month is 0-indexed)
+    if (now >= targetDate) {
+      financialYearStart = 2026;
+      financialYearEnd = 2027;
+    }
+
+    // Format as YY-YY
+    const financialYearShort = `${financialYearStart.toString().slice(-2)}-${financialYearEnd.toString().slice(-2)}`;
+
+    // Get existing invoices with PK prefix
+    const existingInvoices = invoices.filter(invoice =>
+      invoice.invoiceNumber.startsWith('INV_PK_')
+    );
+
+    // Find the highest sequence number
+    let nextSequence = 1;
+    if (existingInvoices.length > 0) {
+      const sequences = existingInvoices.map(invoice => {
+        // Use regex to extract the sequence number from the end of the invoice number
+        const match = invoice.invoiceNumber.match(/_(\d+)$/);
+        const sequenceNumber = match ? parseInt(match[1], 10) : 0;
+        console.log(`Extracted sequence ${sequenceNumber} from invoice ${invoice.invoiceNumber}`);
+        return sequenceNumber;
+      });
+      const maxSequence = Math.max(...sequences);
+      console.log(`Max sequence found: ${maxSequence}, next sequence will be: ${maxSequence + 1}`);
+      nextSequence = maxSequence + 1;
+    }
+
+    // Format with leading zeros
+    const sequenceFormatted = nextSequence.toString().padStart(3, '0');
+
+    return `INV_PK_${financialYearShort}_${sequenceFormatted}`;
+  };
+
+  const handleAddInvoice = () => {
+    form.resetFields(); // Ensure form is cleared before population
     setEditingInvoice(null);
     setSelectedCustomer(null); // Reset selected customer
     
-    // Generate invoice number based on financial year (April 1 to March 31)
-    const generateInvoiceNumber = async () => {
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1; // January is 0
 
-      // Financial year calculation
-      let financialYearStart, financialYearEnd;
-      if (currentMonth >= 4) { // April or later
-        financialYearStart = currentYear;
-        financialYearEnd = currentYear + 1;
-      } else { // January to March
-        financialYearStart = currentYear - 1;
-        financialYearEnd = currentYear;
-      }
-      
-      // Special case: Change to 26-27 format starting from April 1, 2026
-      const targetDate = new Date(2026, 3, 1); // April 1, 2026 (month is 0-indexed)
-      if (now >= targetDate) {
-        financialYearStart = 2026;
-        financialYearEnd = 2027;
-      }
-
-      // Format as YY-YY
-      const financialYearShort = `${financialYearStart.toString().slice(-2)}-${financialYearEnd.toString().slice(-2)}`;
-
-      // Get existing invoices with PK prefix from API
-      let existingInvoices = invoices.filter(invoice =>
-        invoice.invoiceNumber.startsWith('INV_PK_')
-      );
-      
-      // Also fetch from API to ensure we have the latest data
-      try {
-        const apiInvoices = await api.get('/invoices');
-        if (Array.isArray(apiInvoices)) {
-          const apiExistingInvoices = apiInvoices.filter(invoice =>
-            invoice.invoiceNumber.startsWith('INV_PK_')
-          );
-          // Merge with local invoices, removing duplicates
-          existingInvoices = [...existingInvoices, ...apiExistingInvoices].filter((invoice, index, self) =>
-            index === self.findIndex((i) => i.invoiceNumber === invoice.invoiceNumber)
-          );
-        }
-      } catch (error) {
-        console.error('Error fetching invoices for number generation:', error);
-      }
-
-      // Find the highest sequence number
-      let nextSequence = 1;
-      if (existingInvoices.length > 0) {
-        const sequences = existingInvoices.map(invoice => {
-          // Use regex to extract the sequence number from the end of the invoice number
-          const match = invoice.invoiceNumber.match(/_(\d+)$/);
-          const sequenceNumber = match ? parseInt(match[1], 10) : 0;
-          console.log(`Extracted sequence ${sequenceNumber} from invoice ${invoice.invoiceNumber}`);
-          return sequenceNumber;
-        });
-        const maxSequence = Math.max(...sequences);
-        console.log(`Max sequence found: ${maxSequence}, next sequence will be: ${maxSequence + 1}`);
-        nextSequence = maxSequence + 1;
-      }
-
-      // Format with leading zeros
-      const sequenceFormatted = nextSequence.toString().padStart(3, '0');
-
-      return `INV_PK_${financialYearShort}_${sequenceFormatted}`;
-    };
-    
-    const newInvoice: Invoice = {
-      id: '',
-      invoiceNumber: await generateInvoiceNumber(),
+    const newInvoice = {
+      id: Date.now().toString(),
+      invoiceNumber: generateInvoiceNumber(),
       date: new Date().toISOString().split('T')[0],
       customerName: '',
       customerEmail: '',
@@ -679,10 +656,41 @@ useEffect(() => {
       shippingCharges: 0,
       packingCharges: 0,
       total: 0,
+      isFinalized: false, // New invoices are always not finalized
     };
     form.setFieldsValue(newInvoice);
     setCurrentInvoice(newInvoice);
+    setPreviewClearedAfterDeletion(false);
     setVisible(true);
+  };
+
+  const handleDuplicateInvoice = (invoiceToDuplicate: Invoice) => {
+    const duplicatedInvoice: Invoice = {
+      ...invoiceToDuplicate,
+      id: Date.now().toString(), // New unique ID
+      invoiceNumber: generateInvoiceNumber(), // New unique invoice number
+      date: new Date().toISOString().split('T')[0], // Set current date
+      isFinalized: false, // Duplicated invoice is always a draft
+      // Optionally reset other fields like advancePayment, discount, etc. if desired
+      advancePayment: 0,
+      discountRate: 0,
+      discountAmount: 0,
+      shippingCharges: 0,
+      packingCharges: 0,
+      total: invoiceToDuplicate.subtotal, // Reset total based on subtotal (no discounts/charges yet)
+    };
+
+    // Deep copy items to ensure they are new instances
+    duplicatedInvoice.items = invoiceToDuplicate.items.map(item => ({
+      ...item,
+      id: Date.now().toString() + Math.random().toString(36).substring(7), // New ID for each item
+    }));
+    
+    const newInvoices = [...invoices, duplicatedInvoice];
+    setInvoices(sortInvoices(newInvoices)); // Will be sorted after this step
+    localStorage.setItem('invoices', JSON.stringify(newInvoices));
+    message.success(`Invoice ${invoiceToDuplicate.invoiceNumber} duplicated as ${duplicatedInvoice.invoiceNumber}. New Invoice Number: ${duplicatedInvoice.invoiceNumber}`);
+    logAction('duplicated', duplicatedInvoice.id, duplicatedInvoice.invoiceNumber, `Duplicated from invoice ${invoiceToDuplicate.invoiceNumber}.`);
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
@@ -703,6 +711,7 @@ useEffect(() => {
     setEditingInvoice(invoice);
     form.setFieldsValue(formValues);
     setCurrentInvoice(invoice);
+    setPreviewClearedAfterDeletion(false);
     
     // Find and set the selected customer based on customer name
     const customer = customers.find(c => c.customerName === invoice.customerName);
@@ -713,28 +722,106 @@ useEffect(() => {
     setVisible(true);
   };
 
-  const handleDeleteInvoice = async (id: string) => {
-    try {
-      await api.delete(`/invoices/${id}`);
+  const handleDeleteInvoice = (id: string) => {
+    const invoiceToDelete = invoices.find(invoice => invoice.id === id);
+    if (!invoiceToDelete) {
+      console.error("Could not find invoice to delete for logging.");
+      // Still proceed with deletion
       const updatedInvoices = invoices.filter(invoice => invoice.id !== id);
       setInvoices(updatedInvoices);
+      localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
       message.success('Invoice deleted successfully');
-    } catch (error) {
-      console.error('Error deleting invoice:', error);
-      message.error('Failed to delete invoice');
+      return;
     }
+
+    const updatedInvoices = invoices.filter(invoice => invoice.id !== id);
+    setInvoices(updatedInvoices);
+
+    // If the deleted invoice is the one being previewed, clear the preview
+    if (currentInvoice && currentInvoice.id === id) {
+      setCurrentInvoice(null);
+      setPreviewClearedAfterDeletion(true);
+    }
+
+    localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+    message.success('Invoice deleted successfully');
+    logAction('deleted', invoiceToDelete.id, invoiceToDelete.invoiceNumber, 'Invoice deleted.');
   };
 
-  const handleFinalizeInvoice = async (invoice: Invoice) => {
+  const handleFinalizeInvoice = (invoice: Invoice) => {
+    // 1. Get all products
+    const savedProducts = localStorage.getItem('erp_inventory');
+    if (!savedProducts) {
+      message.error('Could not find product list to update stock. Finalization aborted.');
+      return;
+    }
+
+    let products;
     try {
+      products = JSON.parse(savedProducts);
+      if (!Array.isArray(products)) throw new Error("Products data is not an array.");
+    } catch (error) {
+      message.error('Could not parse product list. Finalization aborted.');
+      console.error(error);
+      return;
+    }
+    
+    // Create a map for efficient lookup
+    const productMap = new Map(products.map((p: any) => [p.id, p]));
+
+    const newActivityLogs: any[] = [];
+    // 3. Update stock for each item
+    for (const item of invoice.items) {
+      const product = productMap.get(item.productId);
+      if (product) {
+        const previousQuantity = product.quantity;
+        
+        if (product.productType === 'Manufactured') {
+          product.quantity += item.quantity;
+        } else {
+          product.quantity -= item.quantity;
+        }
+
+        newActivityLogs.push({
+          id: `${Date.now()}-${item.productId}-${Math.random()}`,
+          itemId: item.productId,
+          itemName: item.name,
+          action: 'sale',
+          previousQuantity: previousQuantity,
+          newQuantity: product.quantity, // Log the new quantity
+          timestamp: new Date().toISOString(),
+          user: 'System',
+          invoiceId: invoice.id
+        });
+      }
+    }
+
+    // 4. Get the updated product list from the map
+    const updatedProducts = Array.from(productMap.values());
+
+    try {
+      // 5. Save updated product list
+      localStorage.setItem('erp_inventory', JSON.stringify(updatedProducts));
+
+      const existingLogs = JSON.parse(localStorage.getItem('inventoryActivityLogs') || '[]');
+      const updatedLogs = [...newActivityLogs, ...existingLogs];
+      localStorage.setItem('inventoryActivityLogs', JSON.stringify(updatedLogs));
+      
+      // 6. Finalize the invoice
       const updatedInvoice = { ...invoice, isFinalized: true };
-      await api.put(`/invoices/${invoice.id}/finalize`, updatedInvoice);
       const updatedInvoices = invoices.map(inv => inv.id === invoice.id ? updatedInvoice : inv);
       setInvoices(updatedInvoices);
-      message.success('Invoice finalized successfully');
+      localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+      
+      message.success('Invoice finalized and stock updated successfully');
+      logAction('finalized', updatedInvoice.id, updatedInvoice.invoiceNumber, `Stock updated for ${invoice.items.length} items.`);
+
+      // Also update the 'products' state in this component to reflect changes immediately
+      setProducts(updatedProducts);
+
     } catch (error) {
-      console.error('Error finalizing invoice:', error);
-      message.error('Failed to finalize invoice');
+      console.error('Error during finalization:', error);
+      message.error('An error occurred during finalization.');
     }
   };
 
@@ -749,9 +836,10 @@ useEffect(() => {
     setActionLogVisible(true);
   };
 
-  const handleSaveInvoice = async () => {
-    try {
-      const values = await form.validateFields();
+  const handleSaveInvoice = () => {
+    form
+      .validateFields()
+      .then(values => {
         if (currentInvoice) {
           // Combine the notes lines into a single notes field
           const notesLine1 = values.notesLine1 || '';
@@ -760,147 +848,50 @@ useEffect(() => {
           const combinedNotes = `${notesLine1}\n${notesLine2}\n${notesLine3}`.trim();
           
           const updatedInvoice: Invoice = {
-            invoiceNumber: values.invoiceNumber,
-            date: values.date,
-            customerName: values.customerName,
-            customerEmail: values.customerEmail,
-            billingAddress: values.billingAddress,
-            items: currentInvoice.items,
-            subtotal: currentInvoice.subtotal,
-            total: currentInvoice.total,
-            notes: combinedNotes,
-            status: editingInvoice ? currentInvoice.status : 'draft',
-            id: editingInvoice ? editingInvoice.id : Date.now().toString(),
-          };
-
-          if (editingInvoice) {
-            await api.put(`/invoices/${editingInvoice.id}`, updatedInvoice);
-            const updatedInvoices = invoices.map(invoice => invoice.id === editingInvoice.id ? updatedInvoice : invoice);
-            setInvoices(updatedInvoices);
-            message.success('Invoice updated successfully');
-          } else {
-            const newInvoice = await api.post('/invoices', updatedInvoice);
-            const newInvoices = [...invoices, newInvoice];
-            setInvoices(newInvoices);
-            message.success('Invoice added successfully');
-          }
-
-          setVisible(false);
-        }
-    } catch (error: any) {
-      console.error('Error saving invoice:', error);
-      
-      if (error.message.includes('Invoice number already exists') || error.message.includes('UNIQUE constraint failed: invoices.invoiceNumber')) {
-        message.error('Invoice number already exists. Generating a new one...');
-        // Generate a new invoice number and retry
-        try {
-          const newInvoiceNumber = await generateInvoiceNumber();
-          form.setFieldsValue({ invoiceNumber: newInvoiceNumber });
-          // Retry saving with the new invoice number
-          values.invoiceNumber = newInvoiceNumber;
-          
-          const updatedInvoice: Invoice = {
             ...currentInvoice,
-            invoiceNumber: newInvoiceNumber,
-            date: values.date,
-            customerName: values.customerName,
-            customerEmail: values.customerEmail,
-            billingAddress: values.billingAddress,
-            invoiceType: values.invoiceType || currentInvoice.invoiceType,
-            items: currentInvoice.items,
-            subtotal: currentInvoice.subtotal,
-            discountRate: values.discountRate || currentInvoice.discountRate,
-            discountAmount: currentInvoice.discountAmount,
-            advancePayment: values.advancePayment || currentInvoice.advancePayment,
-            shippingCharges: values.shippingCharges || currentInvoice.shippingCharges,
-            packingCharges: values.packingCharges || currentInvoice.packingCharges,
-            total: currentInvoice.total,
+            ...values,
             notes: combinedNotes,
             notesLine1,
             notesLine2,
             notesLine3,
             id: editingInvoice ? editingInvoice.id : Date.now().toString(),
           };
-          
-          const newInvoice = await api.post('/api/invoices', updatedInvoice);
-          const newInvoices = [...invoices, newInvoice];
-          setInvoices(newInvoices);
-          message.success('Invoice added successfully');
+
+          if (editingInvoice) {
+            const updatedInvoices = invoices.map(invoice => invoice.id === editingInvoice.id ? updatedInvoice : invoice);
+            setInvoices(sortInvoices(updatedInvoices));
+            try {
+              localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+              console.log('Saved updated invoices to localStorage');
+            } catch (error) {
+              console.error('Error saving updated invoices to localStorage:', error);
+            }
+            message.success('Invoice updated successfully');
+            logAction('editted', updatedInvoice.id, updatedInvoice.invoiceNumber, 'Invoice details updated.');
+          } else {
+            const newInvoices = [...invoices, updatedInvoice];
+            setInvoices(newInvoices);
+            try {
+              localStorage.setItem('invoices', JSON.stringify(newInvoices));
+              console.log('Saved new invoices to localStorage');
+            } catch (error) {
+              console.error('Error saving new invoices to localStorage:', error);
+            }
+            message.success('Invoice added successfully');
+            logAction('created', updatedInvoice.id, updatedInvoice.invoiceNumber, 'New invoice created.');
+          }
+
           setVisible(false);
-        } catch (retryError) {
-          console.error('Error retrying invoice creation:', retryError);
-          message.error('Failed to create invoice after retry');
         }
-      } else {
-        message.error('Failed to save invoice');
-      }
-    }
+      })
+      .catch(info => {
+        console.log('Validate Failed:', info);
+      });
   };
 
   const handleAddItem = () => {
     itemForm.resetFields();
     setItemVisible(true);
-  };
-
-  const handleAddNewProduct = async (values: any) => {
-    try {
-      setLoadingNewProduct(true);
-      
-      // Create a new product object
-      const newProduct = {
-        sku: values.sku,
-        name: values.name,
-        category: values.productCategory,
-        description: values.name, // Use name as description
-        quantity: values.quantity || 0,
-        price: values.ratePerPiece || 0,
-        productType: values.productType || 'Traded',
-        costPricePerPiece: values.costPricePerPiece || 0,
-        ratePerPiece: values.ratePerPiece || 0,
-        costPricePerInch: values.costPricePerInch || 0,
-        ratePerInch: values.ratePerInch || 0,
-        size: values.size || 0,
-        unit: values.unit || 'pcs'
-      };
-
-      // Save to server
-      const response = await axios.post('/api/inventory', newProduct, { withCredentials: true });
-      
-      // Create the product object for local state
-      const productForState = {
-        id: response.data.id || `prod-${Date.now()}`,
-        sku: values.sku,
-        name: values.name,
-        productType: values.productType || 'Traded',
-        category: values.productCategory,
-        quantity: values.quantity || 0,
-        price: values.ratePerPiece || 0,
-        costPricePerPiece: values.costPricePerPiece,
-        ratePerPiece: values.ratePerPiece,
-        costPricePerInch: values.costPricePerInch,
-        ratePerInch: values.ratePerInch,
-        size: values.size || 0,
-        unit: values.unit || 'pcs'
-      };
-
-      // Add to local products state
-      setProducts([...products, productForState]);
-      
-      // Show success message
-      message.success('Product added successfully!');
-      
-      // Close the modal
-      setShowAddProductModal(false);
-      productForm.resetFields();
-      
-      // Refresh products list
-      refreshData();
-    } catch (error) {
-      console.error('Error adding product:', error);
-      message.error('Failed to add product. Please try again.');
-    } finally {
-      setLoadingNewProduct(false);
-    }
   };
 
   const handleProductSelect = (productId: string) => {
@@ -910,37 +901,37 @@ useEffect(() => {
       console.log('Found product:', product);
       console.log('Product ratePerInch:', product.ratePerInch);
       // Set the product category
-      const category = product.category || product.productType;
+      const category = (product.category || product.productType || '').toUpperCase();
       itemForm.setFieldsValue({ productCategory: category });
       setSelectedProductCategory(category);
 
       // Set default values for Laddu Gopal Mukut
-      if (category && category.toLowerCase() === 'laddu gopal mukut') {
+      if (category.includes('LADDU GOPAL MUKUT')) {
         console.log('Setting default values for Laddu Gopal Mukut');
         itemForm.setFieldsValue({
           ratePerInch: 1,
-          size: 1
+          size: product.size || 1 // Use product size
         });
       }
       
       // If product is Traded or Laddu Gopal Mukut, show only rate per piece
-      if (product.productType === 'Traded' || product.name.includes('Laddu Gopal Mukut') || (category && category.toLowerCase() === 'laddu gopal mukut')) {
+      if (product.productType?.toUpperCase() === 'TRADED' || product.name.toUpperCase().includes('LADDU GOPAL MUKUT') || category.includes('LADDU GOPAL MUKUT')) {
         // Fetch the Rate per Piece value from the product
         const ratePerPiece = product.price || 0;
         itemForm.setFieldsValue({ 
           rate: ratePerPiece,
-          ratePerInch: 1, // Default to 1 for traded products
-          size: 1 // Default to 1 for traded products
+          ratePerInch: 1, // Keep value in background
+          size: product.size || 1 // Use product size
         });
         setDisablePriceFields(true);
         setShowRateField(true);
         setDisableRateField(false); // Allow editing rate field
       } 
       // If product is Manufactured and category contains "Base", show price per inch and size fields
-      else if (product.productType === 'Manufactured' && category && category.toLowerCase().includes('base')) {
+      else if (product.productType?.toUpperCase() === 'MANUFACTURED' && category.includes('BASE')) {
         // Fetch the Rate Per Inch value from the product
         const ratePerInch = product.ratePerInch || product.costPricePerInch || 1;
-        const size = 1;
+        const size = product.size || 1; // Use product size
         // Calculate Rate/Pc as Price Per Inch x Size
         itemForm.setFieldsValue({ 
           ratePerInch: ratePerInch,
@@ -958,7 +949,8 @@ useEffect(() => {
         // Fetch the Rate per Piece value from the product
         const ratePerPiece = product.price || 0;
         itemForm.setFieldsValue({ 
-          rate: ratePerPiece
+          rate: ratePerPiece,
+          size: product.size || 'N/A'
         });
         setDisablePriceFields(true);
         setShowRateField(true);
@@ -966,6 +958,8 @@ useEffect(() => {
       }
     }
   };
+
+
 
   const handleSaveItem = () => {
     itemForm
@@ -1094,7 +1088,6 @@ useEffect(() => {
         // Set form values with current item data
         itemForm.setFieldsValue({
           productId: item.productId,
-          productIdDisplay: item.name,
           productCategory: item.productCategory || product.productType || '',
           quantity: item.quantity,
           ...(currentInvoice.invoiceType === 'manufactured' && {
@@ -1209,7 +1202,7 @@ useEffect(() => {
       
       // Calculate the correct subtotal
       const subtotal = currentInvoice.items.reduce((sum, item) => {
-        if (item.productCategory === 'Laddu Gopal Base') {
+        if (item.productCategory?.toUpperCase() === 'LADDU GOPAL BASE') {
           return sum + item.total;
         } else {
           return sum + ((item.rate || 0) * (item.quantity || 0));
@@ -1240,7 +1233,7 @@ useEffect(() => {
     if (currentInvoice) {
       // Calculate the correct subtotal
       const subtotal = currentInvoice.items.reduce((sum, item) => {
-        if (item.productCategory === 'Laddu Gopal Base') {
+        if (item.productCategory?.toUpperCase() === 'LADDU GOPAL BASE') {
           return sum + item.total;
         } else {
           return sum + ((item.rate || 0) * (item.quantity || 0));
@@ -1260,7 +1253,7 @@ useEffect(() => {
     if (currentInvoice) {
       // Calculate the correct subtotal
       const subtotal = currentInvoice.items.reduce((sum, item) => {
-        if (item.productCategory === 'Laddu Gopal Base') {
+        if (item.productCategory?.toUpperCase() === 'LADDU GOPAL BASE') {
           return sum + item.total;
         } else {
           return sum + ((item.rate || 0) * (item.quantity || 0));
@@ -1277,13 +1270,46 @@ useEffect(() => {
   };
 
   const handleProductCategoryChange = (value: string) => {
-    // Disable rate field if product category includes "Base"
-    const isBaseProduct = !!(value && value.toLowerCase().includes('base'));
-    setDisableRateField(isBaseProduct);
+    const upperValue = value.toUpperCase();
+    // Disable rate field if product category is a base type
+    setDisableRateField(
+      upperValue === 'LADDU GOPAL BASE' || 
+      upperValue === 'SHYAM BABA BASE' || 
+      upperValue === 'MATA RANI BASE' || 
+      upperValue === 'GANESH LAKSHMI BASE' || 
+      upperValue === 'RK BASE'
+    );
     
     // If rate field is disabled, clear its value
-    if (isBaseProduct) {
+    if (
+      upperValue === 'LADDU GOPAL BASE' || 
+      upperValue === 'SHYAM BABA BASE' || 
+      upperValue === 'MATA RANI BASE' || 
+      upperValue === 'GANESH LAKSHMI BASE' || 
+      upperValue === 'RK BASE'
+    ) {
       itemForm.setFieldsValue({ rate: 0 });
+    }
+  };
+
+  const handlePincodeBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const pincode = e.target.value;
+    console.log(`Pincode blurred: ${pincode}`);
+    if (pincode && pincode.length === 6) {
+      const details = pincodeData.filter((item) => item.pincode === Number(pincode));
+      console.log('Pincode details:', details);
+      if (details && details.length > 0) {
+        const location = details[0];
+        console.log('Location found:', location);
+        if (location) {
+          customerForm.setFieldsValue({
+            city: location.name,
+            district: location.district,
+            state: location.state,
+          });
+          console.log('Form values set');
+        }
+      }
     }
   };
 
@@ -1292,33 +1318,41 @@ useEffect(() => {
     if (customer) {
       setSelectedCustomer(customer);
       
-      // Format address for display - handle both old and new field names
-      const formatAddress = (customer: any) => {
-        const houseNumber = customer.houseNumber || customer.address || '';
-        const city = customer.city || '';
-        const district = customer.district || '';
-        const state = customer.state || '';
-        const pinCode = customer.pinCode || customer.postalCode || '';
-        const landmark = customer.landmark || '';
+      // Format address for display, sourcing from multiple possible fields
+      const formatAddress = (c: any) => {
+        const addressParts = [
+          c.address,
+          c.houseNumber,
+          c.city,
+          c.district,
+          c.state,
+        ].filter(Boolean); // Filter out empty/null/undefined parts
+        const mainAddress = addressParts.join(', ');
+        const pin = c.pinCode || c.postalCode;
+        const landmark = c.landmark ? ` (Landmark: ${c.landmark})` : '';
         
-        return `${houseNumber}, ${city}, ${district}, ${state} - ${pinCode}${landmark ? ` (Landmark: ${landmark})` : ''}`;
+        let fullAddress = mainAddress;
+        if (pin) {
+          fullAddress += ` - ${pin}`;
+        }
+        fullAddress += landmark;
+        
+        return fullAddress;
       };
       
       const billingAddress = formatAddress(customer);
-      const customerName = (customer as any).name || customer.customerName || '';
-      const customerPhone = (customer as any).phone || customer.mobileNumber1 || '';
       
       form.setFieldsValue({
-        customerName: customerName,
-        customerEmail: customerPhone, // Fill with phone number instead of email
+        customerName: customer.customerName, // This is now populated by loadCustomers
+        customerEmail: customer.mobileNumber1, // This is now populated by loadCustomers
         billingAddress: billingAddress,
       });
 
       if (currentInvoice) {
         setCurrentInvoice({
           ...currentInvoice,
-          customerName: customerName,
-          customerEmail: customerPhone, // Fill with phone number instead of email
+          customerName: customer.customerName,
+          customerEmail: customer.mobileNumber1,
           billingAddress: billingAddress,
         });
       }
@@ -1327,21 +1361,18 @@ useEffect(() => {
 
   const handleSaveNewCustomer = () => {
     form.validateFields(['customerName', 'customerEmail', 'billingAddress']).then(values => {
-      const newCustomer: CustomerData = {
+      const newCustomer = {
         id: Date.now().toString(),
         customerName: values.customerName,
         mobileNumber1: values.customerEmail,
-        mobileNumber2: '',
-        houseNumber: '',
+        email: values.customerEmail,
+        billingAddress: values.billingAddress,
+        shippingAddress: values.billingAddress,
         city: '',
-        district: '',
         state: '',
-        pinCode: '',
-        landmark: '',
-        source: '',
       };
       
-      setCustomers([...customers, newCustomer]);
+      setCustomers(...customers, newCustomer);
       setSelectedCustomer(newCustomer);
       message.success('New customer saved successfully!');
     }).catch(error => {
@@ -1366,11 +1397,12 @@ useEffect(() => {
     ];
     
     // Check if there are any Laddu Gopal Base, RK Base or Mata Rani Base products in the current invoice
-    const hasSpecialProducts = currentInvoice?.items.some(item => 
-      item.productCategory === 'Laddu Gopal Base' || 
-      item.productCategory === 'RK Base' || 
-      item.productCategory === 'Mata Rani Base'
-    );
+    const hasSpecialProducts = currentInvoice?.items.some(item => {
+      const upperCategory = item.productCategory?.toUpperCase();
+      return upperCategory === 'LADDU GOPAL BASE' || 
+             upperCategory === 'RK BASE' || 
+             upperCategory === 'MATA RANI BASE';
+    });
 
     // Only add Price Per Inch and Size columns if there are special products
     if (hasSpecialProducts) {
@@ -1380,13 +1412,14 @@ useEffect(() => {
       dataIndex: 'ratePerInch',
       key: 'ratePerInch',
       render: (price: number, record: InvoiceItem) => {
+        const upperCategory = record.productCategory?.toUpperCase();
         // Show size value only if it exists and is not empty
         // Show size for all products 
-        if (record.productCategory === 'Laddu Gopal Base' || 
-            record.productCategory === 'RK Base' || 
-            record.productCategory === 'Mata Rani Base' ||
-            record.productCategory === 'Ganesh Lakshmi Base' ||
-            record.productCategory === 'Shyam Baba Base') {
+        if (upperCategory === 'LADDU GOPAL BASE' ||
+            upperCategory === 'RK BASE' ||
+            upperCategory === 'MATA RANI BASE' ||
+            upperCategory === 'GANESH LAKSHMI BASE' ||
+            upperCategory === 'SHYAM BABA BASE') {
           return `₹${price ? price.toFixed(2) : '0.00'}`;
         }
         return ''; // Return empty string for other categories
@@ -1407,26 +1440,26 @@ useEffect(() => {
       // Add conditional columns
       columns.push(ratePerInchColumn);
       columns.push(sizeColumn);
-    }
+    };
     
     // Continue with the rest of the columns
     if (!hasSpecialProducts) {
-    columns.push(
-      {
-        title: 'Rate/Pc',
-        dataIndex: 'rate',
-        key: 'rate',
+      columns.push(
+        {
+          title: 'Rate/Pc',
+          dataIndex: 'rate',
+          key: 'rate',
         render: (rate: number, record: InvoiceItem) => {
           // For base products, calculate rate as pricePerInch * size
           // Show size for all products 
 
-          if (record.productCategory && record.productCategory.includes('Base')) {
+          if (record.productCategory?.toUpperCase().includes('BASE')) {
             return ''; // Return empty string for Base products
           }
           // For other products, use the rate value directly
           return `₹${rate ? rate.toFixed(2) : '0.00'}`;
         },
-      } as any,
+      },
       {
         title: 'Quantity',
         dataIndex: 'quantity',
@@ -1437,19 +1470,20 @@ useEffect(() => {
         dataIndex: 'unit',
         key: 'unit',
         render: (unit: string) => unit || 'pcs',
-      } as any,
+      },
       {
         title: 'Total',
         dataIndex: 'total',
         key: 'total',
         render: (total: number, record: InvoiceItem) => {
+          const upperCategory = record.productCategory?.toUpperCase();
           // For base products, calculate total as (pricePerInch * size) * quantity
           // Show size for all products 
-          if (record.productCategory === 'Laddu Gopal Base' || 
-              record.productCategory === 'RK Base' || 
-              record.productCategory === 'Mata Rani Base' ||
-              record.productCategory === 'Ganesh Lakshmi Base' ||
-              record.productCategory === 'Shyam Baba Base') {
+          if (upperCategory === 'LADDU GOPAL BASE' ||
+              upperCategory === 'RK BASE' ||
+              upperCategory === 'MATA RANI BASE' ||
+              upperCategory === 'GANESH LAKSHMI BASE' ||
+              upperCategory === 'SHYAM BABA BASE') {
             const cpPerPc = (record.pricePerInch || 0) * (record.size || 0);
             const calculated = cpPerPc * (record.quantity || 0);
             return `₹${calculated.toFixed(2)}`;
@@ -1458,7 +1492,7 @@ useEffect(() => {
           const calculated = (record.rate || 0) * (record.quantity || 0);
           return `₹${calculated.toFixed(2)}`;
         },
-      } as any
+      }
     );
     }
     return columns;
@@ -1480,11 +1514,12 @@ useEffect(() => {
     ];
 
     // Check if there are any base products in the current invoice
-    const hasSpecialProducts = currentInvoice?.items.some(item => 
-      item.productCategory === 'Laddu Gopal Base' || 
-      item.productCategory === 'RK Base' || 
-      item.productCategory === 'Mata Rani Base'
-    );
+    const hasSpecialProducts = currentInvoice?.items.some(item => {
+      const upperCategory = item.productCategory?.toUpperCase();
+      return upperCategory === 'LADDU GOPAL BASE' || 
+             upperCategory === 'RK BASE' || 
+             upperCategory === 'MATA RANI BASE';
+    });
 
     // Always add Size column for all products
       // Add Size column with conditional content
@@ -1512,7 +1547,7 @@ useEffect(() => {
       dataIndex: 'price',
       key: 'price',
       render: (price: number) => `₹${price ? price.toFixed(2) : '0.00'}`,
-    } as any);
+    });
     columns.push({
       title: 'Quantity',
       dataIndex: 'quantity',
@@ -1523,7 +1558,7 @@ useEffect(() => {
       dataIndex: 'unit',
       key: 'unit',
       render: (unit: string) => unit || 'pcs',
-    } as any);
+    });
     columns.push({
       title: 'Total',
       dataIndex: 'total',
@@ -1532,7 +1567,7 @@ useEffect(() => {
         const calculated = (record.price || 0) * (record.quantity || 0);
         return `₹${calculated.toFixed(2)}`;
       },
-    } as any);
+    });
 
     return columns;
   };
@@ -1565,71 +1600,34 @@ useEffect(() => {
 
   // Function to refresh data from API and localStorage
   const refreshData = async () => {
-    // Refresh invoices from API
-    try {
-      const invoicesResponse = await api.get('/invoices');
-      if (Array.isArray(invoicesResponse)) {
-        setInvoices(invoicesResponse);
-        localStorage.setItem('invoices', JSON.stringify(invoicesResponse));
-      }
-    } catch (error) {
-      console.error('Error fetching invoices from API:', error);
-      // Fallback to localStorage if API fails
-      const savedInvoices = localStorage.getItem('invoices');
-      if (savedInvoices) {
-        try {
-          const invoicesData = JSON.parse(savedInvoices);
-          setInvoices(invoicesData);
-        } catch (parseError) {
-          console.error('Error parsing saved invoices in refreshData:', parseError);
-          setInvoices([]);
-        }
-      }
-    }
-    
-    // Refresh customers from API
-    // Refresh customers from API
-    try {
-      const customersResponse = await api.get('/customers');
-      console.log('Raw customers response from API in refreshData:', customersResponse);
-      if (Array.isArray(customersResponse)) {
-        setCustomers(customersResponse);
-        localStorage.setItem('customers', JSON.stringify(customersResponse));
-      }
-    } catch (error) {
-      console.error('Error fetching customers from API:', error);
-      // Fallback to localStorage if API fails
-      const savedCustomers = localStorage.getItem('customers');
-      if (savedCustomers) {
-        try {
-          const customersData = JSON.parse(savedCustomers);
-          setCustomers(customersData);
-        } catch (parseError) {
-          console.error('Error parsing saved customers in refreshData:', parseError);
-          setCustomers([]);
-        }
-      }
+    // Refresh customers
+    const savedCustomers = localStorage.getItem('customers');
+    if (savedCustomers) {
+      const customersData = JSON.parse(savedCustomers);
+      setCustomers(customersData);
     }
     
     // Refresh products from API
     try {
-      const productsResponse = await api.get('/inventory') as any[];
+      const productsResponse = await api.get('/inventory');
       // Transform the data to match our Product interface
-      const transformedProducts = productsResponse.map((item: any) => ({
-        id: item.id,
-        sku: item.sku,
-        name: item.name,
-        size: item.size || 0,
-        unit: item.unit || 'pcs',
-        quantity: item.quantity || 0,
-        price: item.price || 0,
-        productType: item.productType || (item.category && (item.category.includes('Manufactured') || item.category.includes('Laddu Gopal')) ? 'Manufactured' : 'Traded'),
-        category: item.category || 'General',
-        costPricePerInch: item.costPricePerInch,
-        ratePerInch: item.ratePerInch,
-        costPricePerPiece: item.costPricePerPiece,
-        ratePerPiece: item.ratePerPiece
-      }));
+      const transformedProducts = productsResponse.map((item: any) => {
+        const category = item.category || 'General';
+        const inferredProductType = category.toUpperCase().includes('BASE') ? 'Manufactured' : 'Traded';
+        return {
+            id: item.id,
+            sku: item.sku,
+            name: item.name,
+            size: item.size || 0,
+            unit: item.unit || 'pcs',
+            quantity: item.quantity || 0,
+            price: item.price || 0,
+            productType: item.productType || inferredProductType,
+            category: category,
+            costPricePerInch: item.costPricePerInch,
+            ratePerInch: item.ratePerInch
+        };
+      });
       setProducts(transformedProducts);
       
       // Save to localStorage for offline access
@@ -1652,9 +1650,7 @@ useEffect(() => {
           productType: item.productType || 'Traded',
           category: item.productType || 'General', // Use productType as category
           costPricePerInch: item.costPricePerInch,
-          ratePerInch: item.ratePerInch,
-          costPricePerPiece: item.costPricePerPiece,
-          ratePerPiece: item.ratePerPiece
+          ratePerInch: item.ratePerInch
         }));
         setProducts(productsFromInventory);
       }
@@ -1682,6 +1678,43 @@ useEffect(() => {
   const itemColumns = currentInvoice?.invoiceType === 'manufactured' 
     ? [...getManufacturedColumns(), actionColumn] 
     : [...getTradedColumns(), actionColumn];
+
+  const handlePrintSelectedAddresses = () => {
+    selectedRowKeys.forEach(key => {
+      const invoiceToPrint = invoices.find(invoice => invoice.id === key);
+      if (invoiceToPrint) {
+        handlePrintAddress(invoiceToPrint);
+      }
+    });
+  };
+
+  const handlePrintSelected = () => {
+    setPrintSelectedVisible(true);
+  };
+
+  const handleViewSelectedActionLogs = async () => {
+    if (selectedRowKeys.length > 0) {
+        try {
+            const promises = selectedRowKeys.map(key => api.get(`/action-logs/invoice/${key}`));
+            const responses = await Promise.all(promises);
+            const logs = responses.flatMap(response => response);
+            setSelectedActionLogs(logs);
+            setViewSelectedLogsVisible(true);
+        } catch (error) {
+            console.error('Error fetching action logs:', error);
+            message.error('Failed to fetch action logs for selected invoices.');
+        }
+    }
+  };
+
+  const onSelectChange = (newSelectedRowKeys: React.Key[]) => {
+    setSelectedRowKeys(newSelectedRowKeys);
+  };
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: onSelectChange,
+  };
 
   const invoiceColumns = [
     {
@@ -1715,14 +1748,14 @@ useEffect(() => {
       render: (total: number, record: Invoice) => {
         // Calculate the correct total
         const subtotal = record.items.reduce((sum, item) => {
-          if (item.productCategory === 'Laddu Gopal Base') {
+          if (item.productCategory?.toUpperCase() === 'LADDU GOPAL BASE') {
             return sum + item.total;
           } else {
             return sum + ((item.rate || 0) * (item.quantity || 0));
           }
         }, 0);
 
-        const discountAmount = (record.discountType === 'percentage' || !record.discountType) 
+        const discountAmount = record.discountType === 'percentage' 
           ? (subtotal * (record.discountRate || 0)) / 100
           : (record.discountRate || 0);
         const subtotalAfterDiscount = subtotal - discountAmount;
@@ -1735,6 +1768,14 @@ useEffect(() => {
       key: 'action',
       render: (text: string, record: Invoice) => (
         <Space>
+          <Button
+            type="default"
+            icon={<CopyOutlined />}
+            size="small"
+            onClick={() => handleDuplicateInvoice(record)}
+          >
+            Duplicate
+          </Button>
           {!record.isFinalized && (
             <Button
               type="primary"
@@ -1787,6 +1828,7 @@ useEffect(() => {
             size="small"
             onClick={() => {
               setCurrentInvoice(record);
+              setPreviewClearedAfterDeletion(false);
               setTimeout(() => {
                 if (invoiceRef.current) {
                   handlePrint();
@@ -1797,14 +1839,6 @@ useEffect(() => {
             }}
           >
             Print
-          </Button>
-          <Button
-            type="primary"
-            icon={<DownloadOutlined />}
-            size="small"
-            onClick={() => handleDownloadPDF(record)}
-          >
-            Download PDF
           </Button>
           <Button
             type="default"
@@ -1827,19 +1861,52 @@ useEffect(() => {
         <div className="invoice-header">
           <h2 style={{ color: "black", fontWeight: "bold" }}>Invoice Management</h2>
           <Space>
-            <Button icon={<EditOutlined />} onClick={refreshData}>
-              Refresh Data
-            </Button>
+            <DatePicker.RangePicker
+              onChange={(dates, dateStrings) => setDateRange(dateStrings as [string | null, string | null])}
+            />
             <Button type="primary" icon={<PlusOutlined />} onClick={handleAddInvoice}>
               Add Invoice
             </Button>
             <Button icon={<HistoryOutlined />} onClick={() => handleViewActionLog()}>
               View Action Log
             </Button>
+            <Button
+              type="primary"
+              disabled={!selectedRowKeys.length}
+              onClick={handleViewSelectedActionLogs}
+            >
+              View Selected Logs
+            </Button>
+            <Button
+              type="primary"
+              disabled={!selectedRowKeys.length}
+              onClick={handlePrintSelected}
+            >
+              Print Selected
+            </Button>
+            <Button
+              type="primary"
+              disabled={!selectedRowKeys.length}
+              onClick={handlePrintSelectedAddresses}
+            >
+              Print Selected Addresses
+            </Button>
           </Space>
         </div>
-        <Table dataSource={invoices} columns={invoiceColumns} rowKey="id" />
+        <Table dataSource={filteredInvoices} columns={invoiceColumns} rowKey="id" rowSelection={rowSelection} />
       </Card>
+
+      {currentInvoice ? (
+        <Card style={{ marginTop: '24px' }} title="Last Invoice Preview">
+          <InvoicePreview invoice={currentInvoice} />
+        </Card>
+      ) : previewClearedAfterDeletion ? (
+        <Card style={{ marginTop: '24px' }} title="Last Invoice Preview">
+          <div style={{ textAlign: 'center', padding: '50px', color: '#888' }}>
+            <p>add, edit, or print an invoice to preview it</p>
+          </div>
+        </Card>
+      ) : null}
 
       <Modal
         title={editingInvoice ? 'Edit Invoice' : 'Add Invoice'}
@@ -1859,11 +1926,6 @@ useEffect(() => {
           </Button>,
         ]}
       >
-        <div style={{ marginBottom: 16, textAlign: 'right' }}>
-          <Button icon={<EditOutlined />} onClick={refreshData}>
-            Refresh Data
-          </Button>
-        </div>
         <Form form={form} layout="vertical">
           <Row gutter={16}>
             <Col span={12}>
@@ -1901,7 +1963,6 @@ useEffect(() => {
                   placeholder="Search and select a customer"
                   optionFilterProp="children"
                   onChange={handleCustomerSelect}
-                  value={selectedCustomer ? selectedCustomer.id : undefined}
                   filterOption={(input, option) => {
                     if (!option || !option.value) return false;
                     
@@ -1909,36 +1970,23 @@ useEffect(() => {
                     const customer = customers.find(c => c.id === option.value);
                     if (!customer) return false;
                     
-                    // Search in customer name, email, phone, city, and state
+                    // Search in customer ID, name, mobile numbers, city, and state
                     const searchText = input.toLowerCase();
-                    const customerName = (customer as any).name || customer.customerName || '';
-                    const customerEmail = (customer as any).email || customer.mobileNumber1 || '';
-                    const customerPhone = (customer as any).phone || customer.mobileNumber2 || '';
-                    const customerCity = customer.city || '';
-                    const customerState = customer.state || '';
-                    
-                    return !!(
-                      customerName.toLowerCase().includes(searchText) ||
-                      customerEmail.toLowerCase().includes(searchText) ||
-                      customerPhone.toLowerCase().includes(searchText) ||
-                      customerCity.toLowerCase().includes(searchText) ||
-                      customerState.toLowerCase().includes(searchText)
+                    return (
+                      (customer.id && customer.id.toString().toLowerCase().includes(searchText)) ||
+                      (customer.customerName && customer.customerName.toLowerCase().includes(searchText)) ||
+                      (customer.mobileNumber1 && customer.mobileNumber1.toLowerCase().includes(searchText)) ||
+                      (customer.mobileNumber2 && customer.mobileNumber2.toLowerCase().includes(searchText)) ||
+                      (customer.city && customer.city.toLowerCase().includes(searchText)) ||
+                      (customer.state && customer.state.toLowerCase().includes(searchText))
                     );
                   }}
                 >
-                  {customers.map(customer => {
-                    console.log('Rendering customer option:', customer);
-                    console.log('Customer name field:', (customer as any).name || customer.customerName);
-                    console.log('All customer fields:', Object.keys(customer));
-                    
-                    const displayName = (customer as any).name || customer.customerName || `Customer ${customer.id}`;
-                    
-                    return (
-                      <Option key={customer.id} value={customer.id}>
-                        {displayName}
-                      </Option>
-                    );
-                  })}
+                  {customers.map(customer => (
+                    <Option key={customer.id} value={customer.id}>
+                      {customer.customerName}
+                    </Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>
@@ -2089,7 +2137,7 @@ useEffect(() => {
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.name}</td>
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.productCategory || ''}</td>
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      {item.productCategory && item.productCategory.includes('Base') ? `₹${(item.ratePerInch || 1).toFixed(2)}` : ''}
+                      {item.productCategory?.toUpperCase().includes('BASE') ? `₹${(item.ratePerInch || 1).toFixed(2)}` : ''}
                     </td>
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>
                       {item.size || ''}
@@ -2097,70 +2145,77 @@ useEffect(() => {
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>₹{(item.rate || item.price || 0).toFixed(2)}</td>
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.quantity}</td>
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.unit || 'pcs'}</td>
-                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>₹{item.total.toFixed(2)}</td>
+                    <td style={{ border: '1px solid #ddd', padding: '8px' }}>₹{(item.total || 0).toFixed(2)}</td>
                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                      <Button 
-                        size="small" 
-                        type="primary" 
-                        style={{ marginRight: '5px' }}
-                        onClick={() => {
-                          itemForm.setFieldsValue({
-                            editingItemId: item.id,
-                            productIdDisplay: item.name,
-                            productId: item.productId,
-                            productCategory: item.productCategory,
-                            rate: item.rate || item.price,
-                            ratePerInch: item.ratePerInch,
-                            size: item.size,
-                            quantity: item.quantity,
-                            unit: item.unit
-                          });
-                          setSelectedProductCategory(item.productCategory || '');
-                          setItemVisible(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button 
-                        size="small" 
-                        type="default"
-                        icon={<CopyOutlined />}
-                        style={{ marginRight: '5px' }}
-                        onClick={() => {
-                          if (currentInvoice) {
-                            const newItem = {
-                              ...item,
-                              id: Date.now().toString(), // Generate new ID
-                              name: `${item.name} (Copy)`
-                            };
-                            const updatedInvoice = {
-                              ...currentInvoice,
-                              items: [...currentInvoice.items, newItem]
-                            };
-                            setCurrentInvoice(updatedInvoice);
-                            form.setFieldsValue(updatedInvoice);
-                            message.success('Item duplicated successfully');
-                          }
-                        }}
-                      >
-                        Duplicate
-                      </Button>
-                      <Button 
-                        size="small" 
-                        danger
-                        onClick={() => {
-                          if (window.confirm('Are you sure you want to delete this item?')) {
-                            handleDeleteItem(item.id);
-                          }
-                        }}
-                      >
-                        Delete
-                      </Button>
+                                            <Button 
+                                              size="small" 
+                                              type="primary" 
+                                              style={{ marginRight: '5px' }}
+                                              onClick={() => {
+                                                itemForm.setFieldsValue({
+                                                  editingItemId: item.id,
+                                                  productIdDisplay: item.name,
+                                                  productId: item.productId,
+                                                  productCategory: item.productCategory,
+                                                  rate: item.rate || item.price,
+                                                  ratePerInch: item.ratePerInch,
+                                                  size: item.size,
+                                                  quantity: item.quantity,
+                                                  unit: item.unit
+                                                });
+                                                setSelectedProductCategory(item.productCategory);
+                                                setItemVisible(true);
+                                              }}
+                                            >
+                                              Edit
+                                            </Button>
+                                            {showDuplicateButton && (
+                                              <Button 
+                                                size="small" 
+                                                type="default"
+                                                icon={<CopyOutlined />}
+                                                style={{ marginRight: '5px' }}
+                                                onClick={() => {
+                                                  if (currentInvoice) {
+                                                    const newItem = {
+                                                      ...item,
+                                                      id: Date.now().toString(), // Generate new ID
+                                                      name: `${item.name} (Copy)`
+                                                    };
+                                                    const updatedInvoice = {
+                                                      ...currentInvoice,
+                                                      items: [...currentInvoice.items, newItem]
+                                                    };
+                                                    setCurrentInvoice(updatedInvoice);
+                                                    form.setFieldsValue(updatedInvoice);
+                                                    message.success('Item duplicated successfully');
+                                                  }
+                                                }}
+                                              >
+                                                Duplicate
+                                              </Button>
+                                            )}
+                                            <Button 
+                                              size="small" 
+                                              danger
+                                              onClick={() => {
+                                                if (window.confirm('Are you sure you want to delete this item?')) {
+                                                  handleDeleteItem(item.id);
+                                                }
+                                              }}
+                                            >
+                                              Delete
+                                            </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <div style={{ marginTop: '16px', textAlign: 'right' }}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAddItem}>
+                Add Item
+              </Button>
+            </div>
           </div>
 
           <Row gutter={16} style={{ marginTop: 16 }}>
@@ -2171,7 +2226,7 @@ useEffect(() => {
                     min={0}
                     max={discountType === 'percentage' ? 100 : undefined}
                     value={currentInvoice?.discountRate}
-                    onChange={(value) => handleDiscountChange(value || 0)}
+                    onChange={handleDiscountChange}
                     style={{ marginRight: '8px' }}
                   />
                   <Select
@@ -2194,7 +2249,7 @@ useEffect(() => {
                     if (currentInvoice) {
                       // Calculate the correct subtotal
                       const subtotal = currentInvoice.items.reduce((sum, item) => {
-                        if (item.productCategory === 'Laddu Gopal Base') {
+                        if (item.productCategory?.toUpperCase() === 'LADDU GOPAL BASE') {
                           return sum + item.total;
                         } else {
                           return sum + ((item.rate || 0) * (item.quantity || 0));
@@ -2217,7 +2272,7 @@ useEffect(() => {
                 <InputNumber
                   min={0}
                   value={currentInvoice?.shippingCharges}
-                  onChange={(value) => handleShippingChargesChange(value || 0)}
+                  onChange={handleShippingChargesChange}
                 />
               </Form.Item>
             </Col>
@@ -2226,7 +2281,7 @@ useEffect(() => {
                 <InputNumber
                   min={0}
                   value={currentInvoice?.packingCharges}
-                  onChange={(value) => handlePackingChargesChange(value || 0)}
+                  onChange={handlePackingChargesChange}
                 />
               </Form.Item>
             </Col>
@@ -2265,7 +2320,7 @@ useEffect(() => {
               <Col span={6}>
                 <div style={{ textAlign: 'right', fontWeight: 'bold', color: '#333' }}>
                   ₹{(currentInvoice?.items.reduce((sum, item) => {
-                    if (item.productCategory === 'Laddu Gopal Base') {
+                    if (item.productCategory?.toUpperCase() === 'LADDU GOPAL BASE') {
                       return sum + item.total;
                     } else {
                       return sum + ((item.rate || 0) * (item.quantity || 0));
@@ -2349,7 +2404,7 @@ useEffect(() => {
                     <div style={{ textAlign: 'right', fontSize: '16px', fontWeight: 'bold', color: '#f5222d' }}>
                       ₹{(() => {
                         const subtotal = currentInvoice?.items.reduce((sum, item) => {
-                          if (item.productCategory === 'Laddu Gopal Base') {
+                          if (item.productCategory?.toUpperCase() === 'LADDU GOPAL BASE') {
                             return sum + item.total;
                           } else {
                             return sum + ((item.rate || 0) * (item.quantity || 0));
@@ -2386,15 +2441,16 @@ useEffect(() => {
             console.log('Selected product category:', selectedProductCategory);
             console.log('Invoice type:', currentInvoice?.invoiceType);
             
+            const upperCategory = selectedProductCategory.toUpperCase();
             // If it's a manufactured invoice with any Base product and ratePerInch or size changes, calculate the rate
             if (currentInvoice?.invoiceType === 'manufactured' && 
-                selectedProductCategory && selectedProductCategory.toLowerCase().includes('base') && 
+                upperCategory && upperCategory.includes('BASE') && 
                 (changedValues.ratePerInch || changedValues.size)) {
               const ratePerInch = allValues.ratePerInch || 1; // Default to 1 instead of 0
               const size = allValues.size || 1; // Default to 1 instead of 0
               const rate = ratePerInch * size;
               
-              console.log('Calculating rate for Base product:', { ratePerInch, size, rate, productCategory: selectedProductCategory });
+              console.log('Calculating rate:', { ratePerInch, size, rate });
               
               // Always update the rate field
               itemForm.setFieldsValue({ rate });
@@ -2402,7 +2458,7 @@ useEffect(() => {
             }
             
             // For traded products or laddu gopal mukut, ensure rate doesn't change when quantity changes
-            if ((currentInvoice?.invoiceType !== 'manufactured' || selectedProductCategory === 'laddu gopal mukut') && changedValues.quantity) {
+            if ((currentInvoice?.invoiceType !== 'manufactured' || upperCategory === 'LADDU GOPAL MUKUT') && changedValues.quantity) {
               // Always preserve the current rate value, don't let it change
               if (allValues.rate !== undefined) {
                 // Keep the current rate, don't recalculate
@@ -2426,74 +2482,70 @@ useEffect(() => {
           </Form.Item>
           
           <Form.Item
-            name="productIdDisplay"
+            name="productId"
             label="Product"
             rules={[{ required: true, message: 'Please select or enter a product!' }]}
           >
             <div style={{ display: 'flex', gap: '8px' }}>
               <Select 
-              placeholder="Select or enter a product"
-
-              showSearch
-              optionFilterProp="children"
-              filterOption={(input, option) =>
-                String(option?.children || '').toLowerCase().includes(input.toLowerCase())
-              }
-              onChange={(value) => {
-                // Check if the value matches an existing product ID
-                const selectedProduct = products.find(p => p.id === value);
-                
-                if (selectedProduct) {
-                  // Update the display field with the product name
-                  itemForm.setFieldsValue({
-                    productIdDisplay: selectedProduct.name,
-                    productId: value
-                  });
-                  
-                  // Use the handleProductSelect function
-                  handleProductSelect(value);
-                  
-                  // Handle product category change
-                  handleProductCategoryChange(selectedProduct.category || '');
-                  
-                  // Auto-populate price based on product
-                  if (currentInvoice?.invoiceType === 'manufactured') {
-                    // Use inch-based pricing if available (for Laddu Gopal Dress and Base)
-                    if (selectedProduct.costPricePerInch !== undefined) {
-                      itemForm.setFieldsValue({
-                        pricePerInch: selectedProduct.costPricePerInch
-                      });
-                    } else {
-                      itemForm.setFieldsValue({
-                        pricePerInch: selectedProduct.price
-                      });
-                    }
-                  }
-                  
-                  // Set the rate field with the product price
-                  itemForm.setFieldsValue({
-                    rate: selectedProduct.price
-                  });
+                value={itemForm.getFieldValue('productId')}
+                placeholder="Select or enter a product"
+                showSearch
+                optionLabelProp="label"
+                filterOption={(input, option) =>
+                  (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                 }
-              }}
+                onChange={(value) => {
+                  // Check if the value matches an existing product ID
+                  const selectedProduct = products.find(p => p.id === value);
+                  
+                  if (selectedProduct) {
+                    // Update the display field with the product name
+                    itemForm.setFieldsValue({
+                      productId: value
+                    });
+                    
+                    // Use the handleProductSelect function
+                    handleProductSelect(value);
+                    
+                    // Handle product category change
+                    handleProductCategoryChange(selectedProduct.category);
+                    
+                    // Auto-populate price based on product
+                    if (currentInvoice?.invoiceType === 'manufactured') {
+                      // Use inch-based pricing if available (for Laddu Gopal Dress and Base)
+                      if (selectedProduct.costPricePerInch !== undefined) {
+                        itemForm.setFieldsValue({
+                          pricePerInch: selectedProduct.costPricePerInch
+                        });
+                      } else {
+                        itemForm.setFieldsValue({
+                          pricePerInch: selectedProduct.price
+                        });
+                      }
+                    }
+                    
+                    // Set the rate field with the product price
+                    itemForm.setFieldsValue({
+                      rate: selectedProduct.price
+                    });
+                  }
+                }}
               >
                 {products.map((product) => (
-                  <Select.Option key={product.id} value={product.id}>
-                    {product.name}
+                  <Select.Option key={product.id} value={product.id} label={product.name}>
+                    <div>
+                      <strong>{product.name}</strong>
+                    </div>
+                    <div>
+                      <small>Product Type: {product.productType || 'N/A'} | Size: {product.size || 'N/A'}</small>
+                    </div>
                   </Select.Option>
                 ))}
               </Select>
 
 
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  setShowAddProductModal(true);
-                }}
-              >
-                Add New Product
-              </Button>
+            {/* Add New Product button hidden */}
             </div>
           </Form.Item>
           
@@ -2515,40 +2567,75 @@ useEffect(() => {
               step={0.01} 
               style={{ width: '100%' }} 
               formatter={value => `₹ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={value => Number(String(value || '').replace(/₹\s?|(,*)/g, '')) || 0 as any}
+              parser={value => value!.replace(/₹\s?|(,*)/g, '') as unknown as number}
               placeholder="Enter rate per piece"
-              disabled={disableRateField || !!(selectedProductCategory && selectedProductCategory.toLowerCase().includes('base'))}
+              disabled={disableRateField || (selectedProductCategory.toUpperCase() === 'LADDU GOPAL BASE' || selectedProductCategory.toUpperCase() === 'RK BASE' || selectedProductCategory.toUpperCase() === 'SHYAM BABA BASE' || selectedProductCategory.toUpperCase() === 'MATA RANI BASE' || selectedProductCategory.toUpperCase() === 'GANESH LAKSHMI BASE')}
             />
           </Form.Item>
           )}
           
-          {currentInvoice?.invoiceType === 'manufactured' ? (
-            <>
           <Form.Item
-            name="ratePerInch"
-            label="Rate Per Inch"
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.productId !== currentValues.productId}
           >
-            <InputNumber 
-              min={0} 
-              step={0.01} 
-              style={{ width: '100%' }} 
-              formatter={value => `₹ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={value => Number(String(value || '').replace(/₹\s?|(,*)/g, '')) || 0 as any}
-              placeholder="Enter rate per inch"
-              disabled={!(currentInvoice?.invoiceType === 'manufactured' && selectedProductCategory && selectedProductCategory.toLowerCase().includes('base'))}
-            />
+            {({ getFieldValue }) => {
+              const productId = getFieldValue('productId');
+              const product = products.find(p => p.id === productId);
+              
+              if (!product) {
+                return null;
+              }
+
+              const productTypeUpper = product.productType?.toUpperCase();
+
+              if (productTypeUpper === 'TRADED') {
+                return null;
+              }
+
+              const isEditing = !!itemForm.getFieldValue('editingItemId');
+              const isManufactured = productTypeUpper === 'MANUFACTURED';
+              const category = (product.category || '').toUpperCase();
+              const isManufacturedBase = isManufactured && category.includes('BASE');
+
+              const shouldShow = (isEditing && isManufactured) || isManufacturedBase;
+              
+              console.log('RATE PER INCH FIELD DEBUG:', {
+                product: {id: product.id, name: product.name, productType: product.productType, category: product.category},
+                isManufactured,
+                category,
+                isManufacturedBase,
+                shouldShow
+              });
+
+              if (shouldShow) {
+                return (
+                  <Form.Item
+                    name="ratePerInch"
+                    label="Rate Per Inch"
+                  >
+                    <InputNumber 
+                      min={0} 
+                      step={0.01} 
+                      style={{ width: '100%' }} 
+                      formatter={value => `₹ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      parser={value => value!.replace(/₹\s?|(,*)/g, '') as unknown as number}
+                      placeholder="Enter rate per inch"
+                      disabled={!(currentInvoice?.invoiceType === 'manufactured' && (selectedProductCategory.toUpperCase() === 'LADDU GOPAL BASE' || selectedProductCategory.toUpperCase() === 'RK BASE' || selectedProductCategory.toUpperCase() === 'SHYAM BABA BASE' || selectedProductCategory.toUpperCase() === 'MATA RANI BASE' || selectedProductCategory.toUpperCase() === 'GANESH LAKSHMI BASE'))}
+                    />
+                  </Form.Item>
+                );
+              }
+              return null;
+            }}
           </Form.Item>
-              
-            </>
-          ) : null}
-              
-              <Form.Item
-                name="size"
-                label="Size"
+
+          <Form.Item
+            name="size"
+            label="Size"
             rules={[{ required: true, message: 'Please input size!' }]}
-              >
+          >
             <Input placeholder="Enter size (e.g., S, M, L, or numeric value)" style={{ width: '100%' }} defaultValue="S" />
-              </Form.Item>
+          </Form.Item>
           
           <Form.Item
             name="quantity"
@@ -2580,279 +2667,16 @@ useEffect(() => {
                 { value: 'Dozen', label: 'Dozen' },
               ]}
               filterOption={(inputValue, option) =>
-                (option?.value || '').toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                option.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
               }
             />
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* Add New Product Modal */}
-      <Modal
-        title="Add New Product"
-        open={showAddProductModal}
-        onCancel={() => {
-          setShowAddProductModal(false);
-          productForm.resetFields();
-        }}
-        footer={null}
-        width={800}
-        destroyOnClose
-      >
-        <ProductFormComponent
-          form={productForm}
-          onFinish={handleAddNewProduct}
-          onCancel={() => {
-            setShowAddProductModal(false);
-            productForm.resetFields();
-          }}
-          isEditing={false}
-          productCategories={productTypes}
-        />
-      </Modal>
-
       {/* Hidden printable invoice */}
-      <div ref={invoiceRef} className="hidden">
-        <div className="invoice-container">
-          <div className="invoice-header">
-            <div>
-              <img src="/pk-logo.png" alt="Company Logo" style={{ marginTop: "10px", maxWidth: "400px" }} />
-            </div>
-            <div>
-              <div><strong>Invoice #:</strong> {currentInvoice?.invoiceNumber}</div>
-              <div><strong>Date:</strong> {currentInvoice?.date}</div>
-              <div style={{display: 'none'}}><strong>Type:</strong> 
-                <span style={{ 
-                  textTransform: 'capitalize',
-                  color: currentInvoice?.invoiceType === 'manufactured' ? '#1890ff' : '#52c41a' 
-                }}>
-                  {currentInvoice?.invoiceType}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="invoice-details">
-            <div className="invoice-details-grid">
-              <div className="invoice-customer">
-                <h3>Customer Name:</h3>
-                <div><strong>{currentInvoice?.customerName}</strong></div>
-                <div>Phone: {currentInvoice?.customerEmail}</div>
-                <h3>Customer Address:</h3>
-                <div>{currentInvoice?.billingAddress}</div>
-              </div>
-              <div className="invoice-sender">
-                <h3>Seller Name:</h3>
-                <div><strong>Pooja Kreations</strong></div>
-                <div>Phone: 9749928722</div>
-                <h3>Seller Address:</h3>
-                <div>Cinema Hall Road, Durgapur</div>
-                <div>West Bengal, PIN - 713201</div>
-                <div>(near Shiv Mandir)</div>
-              </div>
-            </div>
-          </div>
-
-          <table className="invoice-table">
-            <thead>
-              {(() => {
-                // Check if there are any Laddu Gopal Base products in the current invoice
-                const hasBaseProducts = currentInvoice?.items.some(item => 
-                  item.productCategory === 'Laddu Gopal Base' || 
-                  item.productCategory === 'RK Base' || 
-                  item.productCategory === 'Mata Rani Base' ||
-                  item.productCategory === 'Ganesh Lakshmi Base' ||
-                  item.productCategory === 'Shyam Baba Base'
-                );
-                
-                if (currentInvoice?.invoiceType === 'manufactured') {
-                  // Check if any item has ratePerInch > 1
-                  const hasRatePerInch = currentInvoice?.items.some(item => (item.ratePerInch || 0) > 1);
-                  
-                    return (
-                      <tr>
-                        <th>Product Name</th>
-                      {hasRatePerInch && <th>Rate Per Inch</th>}
-                      <th>Size</th>
-                        <th>Rate /Pc</th>
-                        <th>Quantity</th>
-                        <th>Unit</th>
-                        <th>Total</th>
-                      </tr>
-                    );
-                  } else {
-                    return (
-                      <tr>
-                        <th>Product Name</th>
-                      <th>Size</th>
-                      <th>Quantity</th>
-                      <th>Unit</th>
-                      <th>Price</th>
-                      <th>Total</th>
-                    </tr>
-                  );
-                }
-              })()}
-            </thead>
-            <tbody>
-              {(() => {
-                // Check if there are any Laddu Gopal Base products in the current invoice
-                const hasBaseProducts = currentInvoice?.items.some(item => 
-                  item.productCategory === 'Laddu Gopal Base' || 
-                  item.productCategory === 'RK Base' || 
-                  item.productCategory === 'Mata Rani Base' ||
-                  item.productCategory === 'Ganesh Lakshmi Base' ||
-                  item.productCategory === 'Shyam Baba Base'
-                );
-                console.log('Table body hasBaseProducts:', hasBaseProducts);
-                console.log('Table body currentInvoice.items:', currentInvoice?.items);
-                
-                return currentInvoice?.items.map((item) => {
-                  if (currentInvoice?.invoiceType === 'manufactured') {
-                      console.log('Rendering table row for manufactured item:', item);
-                      return (
-                        <tr key={item.id}>
-                          <td>{item.name}</td>
-                          {(item.ratePerInch || 0) > 1 ? <td>₹{(item.ratePerInch || 0).toFixed(2)}</td> : <td></td>}
-                          <td>{item.size || ''}</td>
-                          <td>{(function() {
-                             console.log('Rendering rate cell with value:', item.rate, 'for item:', item.name);
-                             return `₹${(item.rate || 0).toFixed(2)}`;
-                           })()}</td>
-                          <td>{item.quantity}</td>
-                          <td>{item.unit || 'pcs'}</td>
-                          <td>₹{item.total.toFixed(2)}</td>
-                        </tr>
-                      );
-                    } else {
-                      return (
-                        <tr key={item.id}>
-                          <td>{item.name}</td>
-                          <td>{item.size || ''}</td>
-                        <td>{item.quantity}</td>
-                        <td>{item.unit || 'pcs'}</td>
-                        <td>₹{(item.rate || item.price || 0).toFixed(2)}</td>
-                        <td>₹{item.total.toFixed(2)}</td>
-                      </tr>
-                    );
-                  }
-                });
-              })()}
-            </tbody>
-          </table>
-
-          <div className="invoice-summary">
-            <div className="invoice-notes-section">
-              {(currentInvoice?.notesLine1 || currentInvoice?.notesLine2 || currentInvoice?.notesLine3) && (
-                <div className="invoice-notes">
-                  <div className="invoice-notes-row">
-                    <p>Notes:</p>
-                  </div>
-                  <div className="invoice-notes-row" style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>
-                    <p style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>{currentInvoice?.notesLine1 || ''}</p>
-                  </div>
-                  <div className="invoice-notes-row" style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>
-                    <p style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>{currentInvoice?.notesLine2 || ''}</p>
-                  </div>
-                  <div className="invoice-notes-row" style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>
-                    <p style={{ marginBottom: '0px', lineHeight: '0.8', padding: '0' }}>{currentInvoice?.notesLine3 || ''}</p>
-                  </div>
-                </div>
-              )}
-                        <div className="invoice-terms">
-            <h3>Terms and Conditions:</h3>
-            <p>1. Open box video is mandatory for any claim or dispute. </p>
-            <p>2. Any claim or dispute arising from change in quality, shortage in quantity, or any cause whatsoever will not be entertained once the goods are delivered, if open box video, made at the time of delivery, is not provided.</p>
-            <p>3. Payment for this invoice is due within 24 hours of the billing date.</p>
-            <p>4. Late payment charges at 24% p.a. will be charged on amount of the bill after due date.</p>
-            <p>5. We are not responsible for any loss or damage during transit. </p>
-            <p>6. Subject to DURGAPUR jurisdiction only.</p>
-          </div>
-            </div>
-            <div className="invoice-totals">
-              <div className="invoice-totals-row">
-                <span>Subtotal:</span>
-              <span>₹{(currentInvoice?.items.reduce((sum, item) => {
-                if (item.productCategory === 'Laddu Gopal Base' || 
-                    item.productCategory === 'RK Base' || 
-                    item.productCategory === 'Mata Rani Base' ||
-                    item.productCategory === 'Ganesh Lakshmi Base' ||
-                    item.productCategory === 'Shyam Baba Base') {
-                  return sum + item.total;
-                } else {
-                  return sum + ((item.rate || 0) * (item.quantity || 0));
-                }
-              }, 0) || 0).toFixed(2)}</span>
-            </div>
-            {(currentInvoice?.discountAmount || 0) > 0 && (
-              <div className="invoice-totals-row">
-                <span>Discount: </span>
-                <span>-₹{(currentInvoice?.discountAmount || 0).toFixed(2)}</span>
-              </div>
-            )}
-            <div className="invoice-totals-row">
-              <span>Shipping Charges:</span>
-              <span>₹{(currentInvoice?.shippingCharges || 0).toFixed(2)}</span>
-            </div>
-            <div className="invoice-totals-row">
-              <span>Packing Charges:</span>
-              <span>₹{(currentInvoice?.packingCharges || 0).toFixed(2)}</span>
-            </div>
-            <div className="invoice-totals-row total">
-              <span>Total:</span>
-              <span>₹{(() => {
-                const subtotal = currentInvoice?.items.reduce((sum, item) => {
-                  if (item.productCategory === 'Laddu Gopal Base' || 
-                      item.productCategory === 'RK Base' || 
-                      item.productCategory === 'Mata Rani Base' ||
-                      item.productCategory === 'Ganesh Lakshmi Base' ||
-                      item.productCategory === 'Shyam Baba Base') {
-                    return sum + item.total;
-                  } else {
-                    return sum + ((item.rate || 0) * (item.quantity || 0));
-                  }
-                }, 0) || 0;
-
-                const discountAmount = currentInvoice?.discountAmount || 0; 
-
-                const subtotalAfterDiscount = subtotal - discountAmount;
-                const total = subtotalAfterDiscount + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
-                return total.toFixed(2);
-              })()}</span>
-            </div>
-            {(currentInvoice?.advancePayment || 0) > 0 && (
-              <>
-                <div className="invoice-totals-row">
-                  <span>Advance Payment:</span>
-                  <span>-₹{(currentInvoice?.advancePayment || 0).toFixed(2)}</span>
-                </div>
-                <div className="invoice-totals-row total" style={{ borderTop: '2px solid #000', paddingTop: '10px', marginTop: '10px' }}>
-                  <span>Amount Due:</span>
-                  <span>₹{(() => {
-                    const subtotal = currentInvoice?.items.reduce((sum, item) => {
-                      if (item.productCategory === 'Laddu Gopal Base') {
-                        return sum + item.total;
-                      } else {
-                        return sum + ((item.rate || 0) * (item.quantity || 0));
-                      }
-                    }, 0) || 0;
-
-                    const discountAmount = currentInvoice?.discountAmount || 0; 
-                    const subtotalAfterDiscount = subtotal - discountAmount;
-                    const total = subtotalAfterDiscount + (currentInvoice?.shippingCharges || 0) + (currentInvoice?.packingCharges || 0);
-                    const amountDue = total - (currentInvoice?.advancePayment || 0);
-                    return amountDue.toFixed(2);
-                  })()}</span>
-                </div>
-              </>
-            )}
-          </div>
-
-          </div>
-          <div className="invoice-terms">
-            <p style={{ fontSize: '16px', fontWeight: 'bold' }}> Powered By Devambaram Industries Private Limited. </p>
-          </div>
-        </div>
+      <div className="hidden-for-printing">
+        <InvoicePreview ref={invoiceRef} invoice={currentInvoice} />
       </div>
 
       {/* Customer Modal */}
@@ -2976,9 +2800,45 @@ useEffect(() => {
                 label="State"
               >
                 <Select
+                  placeholder="Select a state"
                   showSearch
-                  placeholder="Select or type a state"
+                  optionFilterProp="children"
+                  filterOption={(input, option) =>
+                    (option?.children as unknown as string)
+                      .toLowerCase()
+                      .includes(input.toLowerCase())
+                  }
                 >
+                  <Select.Option value="">Select a state</Select.Option>
+                  <Select.Option value="Andhra Pradesh">Andhra Pradesh</Select.Option>
+                  <Select.Option value="Arunachal Pradesh">Arunachal Pradesh</Select.Option>
+                  <Select.Option value="Assam">Assam</Select.Option>
+                  <Select.Option value="Bihar">Bihar</Select.Option>
+                  <Select.Option value="Chhattisgarh">Chhattisgarh</Select.Option>
+                  <Select.Option value="Goa">Goa</Select.Option>
+                  <Select.Option value="Gujarat">Gujarat</Select.Option>
+                  <Select.Option value="Haryana">Haryana</Select.Option>
+                  <Select.Option value="Himachal Pradesh">Himachal Pradesh</Select.Option>
+                  <Select.Option value="Jharkhand">Jharkhand</Select.Option>
+                  <Select.Option value="Karnataka">Karnataka</Select.Option>
+                  <Select.Option value="Kerala">Kerala</Select.Option>
+                  <Select.Option value="Madhya Pradesh">Madhya Pradesh</Select.Option>
+                  <Select.Option value="Maharashtra">Maharashtra</Select.Option>
+                  <Select.Option value="Manipur">Manipur</Select.Option>
+                  <Select.Option value="Meghalaya">Meghalaya</Select.Option>
+                  <Select.Option value="Mizoram">Mizoram</Select.Option>
+                  <Select.Option value="Nagaland">Nagaland</Select.Option>
+                  <Select.Option value="Odisha">Odisha</Select.Option>
+                  <Select.Option value="Punjab">Punjab</Select.Option>
+                  <Select.Option value="Rajasthan">Rajasthan</Select.Option>
+                  <Select.Option value="Sikkim">Sikkim</Select.Option>
+                  <Select.Option value="Tamil Nadu">Tamil Nadu</Select.Option>
+                  <Select.Option value="Telangana">Telangana</Select.Option>
+                  <Select.Option value="Tripura">Tripura</Select.Option>
+                  <Select.Option value="Uttar Pradesh">Uttar Pradesh</Select.Option>
+                  <Select.Option value="Uttarakhand">Uttarakhand</Select.Option>
+                  <Select.Option value="West Bengal">West Bengal</Select.Option>
+                  <Select.Option value="Delhi">Delhi</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -2989,7 +2849,10 @@ useEffect(() => {
                 name="pinCode"
                 label="PIN Code"
               >
-                <Input placeholder="Enter PIN code" />
+                <Input 
+                  placeholder="Enter PIN code" 
+                  onBlur={handlePincodeBlur}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -3013,22 +2876,21 @@ useEffect(() => {
         width={800}
       >
         <ProductForm
-          onProductAdded={(newProduct: any) => {
+          onProductAdded={(newProduct) => {
             // Add the new product to the products list
-            setProducts([...products, newProduct as Product]);
+            setProducts([...products, newProduct]);
             // Close the modal
             setShowProductForm(false);
             // Select the newly added product
             itemForm.setFieldsValue({
               productId: newProduct.id,
-              productIdDisplay: newProduct.name
-            });
+              });
             // Set the rate field with the product price
             itemForm.setFieldsValue({
               rate: newProduct.price
             });
             // Handle product category change
-            handleProductCategoryChange(newProduct.productCategory || '');
+            handleProductCategoryChange(newProduct.productCategory);
           }}
           onCancel={() => setShowProductForm(false)}
         />
@@ -3040,6 +2902,96 @@ useEffect(() => {
         invoiceId={selectedInvoiceId}
         invoiceNumber={selectedInvoiceNumber}
       />
+
+      <Modal
+        title="Selected Action Logs"
+        open={viewSelectedLogsVisible}
+        onCancel={() => setViewSelectedLogsVisible(false)}
+        footer={null}
+        width={1000}
+      >
+        <Table
+          dataSource={selectedActionLogs}
+          rowKey="id"
+          columns={[
+            {
+              title: 'Invoice Number',
+              dataIndex: 'invoiceNumber',
+              key: 'invoiceNumber',
+            },
+            {
+              title: 'Date of Action',
+              dataIndex: 'actionDate',
+              key: 'dateOfAction',
+              render: (date) => moment(date).format('YYYY-MM-DD'),
+            },
+            {
+              title: 'Time of Action',
+              dataIndex: 'actionDate',
+              key: 'timeOfAction',
+              render: (date) => moment(date).format('HH:mm:ss'),
+            },
+            {
+              title: 'Status',
+              dataIndex: 'action',
+              key: 'action',
+              render: (action) => {
+                const actionMap = {
+                  created: 'created',
+                  editted: 'editted',
+                  deleted: 'deleted',
+                  finalize: 'finalize',
+                };
+                return actionMap[action] || action;
+              }
+            },
+            {
+              title: 'User',
+              dataIndex: 'username',
+              key: 'username',
+            },
+            {
+              title: 'Details',
+              dataIndex: 'details',
+              key: 'details',
+            },
+          ]}
+        />
+      </Modal>
+
+      <Modal
+        title="Print Selected Invoices"
+        open={printSelectedVisible}
+        onCancel={() => setPrintSelectedVisible(false)}
+        width="80%"
+        footer={[
+            <Button key="back" onClick={() => setPrintSelectedVisible(false)}>
+                Cancel
+            </Button>,
+            <Button key="print" type="primary" onClick={handlePrintSelectedInvoices}>
+                Print
+            </Button>,
+        ]}
+      >
+        <style>{`
+          @media print {
+            .page-break {
+              page-break-after: always;
+            }
+          }
+        `}</style>
+        <div ref={printSelectedRef}>
+            {selectedRowKeys.map(key => {
+                const invoice = invoices.find(inv => inv.id === key);
+                if (!invoice) return null;
+                return (
+                    <div key={invoice.id} className="page-break">
+                        <InvoicePreview invoice={invoice} />
+                    </div>
+                );
+            })}
+        </div>
+      </Modal>
     </div>
   );
 };

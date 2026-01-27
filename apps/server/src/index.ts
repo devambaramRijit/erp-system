@@ -4,8 +4,8 @@ const path = require('path');
 const session = require('express-session');
 
 // Import routes
-const authRoutes = require('./routes/auth.routes');
-const inventoryRoutes = require('./routes/inventory.routes');
+const authRoutes = require('./routes/auth.routes').default;
+const inventoryRoutes = require('./routes/inventory.routes').default;
 
 const app = express();
 const port = process.env.PORT || 3000;

@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import axios from './api';
 import * as XLSX from 'xlsx';
-
-// Set correct API URL
-axios.defaults.baseURL = 'http://192.168.0.107:3000/api';
 import {
   Button,
   Card,
@@ -34,8 +31,11 @@ import {
   ExclamationCircleOutlined,
   InboxOutlined,
   DownloadOutlined,
-  ImportOutlined
+  ImportOutlined,
+  UserSwitchOutlined
 } from '@ant-design/icons';
+
+import { PageHeader, ControlPanel, CustomerForm } from './components/CustomerScreenComponents';
 
 // Assuming this interface is defined in './services/mockApi' or a shared types file
 // I'm defining it here for clarity, please ensure your actual CustomerData matches this.
@@ -51,6 +51,7 @@ export interface CustomerData {
   phone: string; // Maps to 'MOBILE NO.' or 'MOBILE NO. 1'
   mobileNumber2: string; // Maps to 'MOBILE NO. 2'
   source: string;
+  createdAt?: string;
 }
 
 
@@ -61,6 +62,24 @@ const standardizeState = (state: string) => {
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
+};
+
+// Helper function to normalize customer data from different sources
+const normalizeCustomerData = (customer: any): CustomerData => {
+  return {
+    id: customer.id || Date.now().toString() + Math.random(), // Ensure ID exists
+    name: customer.name || customer.customerName || '',
+    address: customer.address || customer.billingAddress || '',
+    city: customer.city || '',
+    district: customer.district || '',
+    state: standardizeState(customer.state || ''),
+    postalCode: customer.postalCode || customer.pinCode || '',
+    landmark: customer.landmark || '',
+    phone: customer.phone || customer.mobileNumber1 || '',
+    mobileNumber2: customer.mobileNumber2 || '',
+    source: customer.source || '',
+    createdAt: customer.createdAt || new Date().toISOString(),
+  };
 };
 
 // Initial form data - ALIGNED WITH CustomerData INTERFACE
@@ -85,12 +104,20 @@ const CustomerScreen = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerData | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState<Omit<CustomerData, 'id'>>(initialFormData);
   const [form] = Form.useForm();
+  const [tableParams, setTableParams] = useState({
+    pagination: {
+      current: 1,
+      pageSize: 10,
+      showSizeChanger: true,
+      pageSizeOptions: [10, 20, 50, 100, 500, 1000, 2000, 5000],
+    },
+  });
 
   useEffect(() => {
     fetchCustomers();
@@ -137,156 +164,57 @@ const CustomerScreen = () => {
   }, [searchTerm, customers]);
 
   const fetchCustomers = async () => {
-    console.log('Fetching customers from backend...');
-    try {
-      setIsLoading(true);
-
+    setIsLoading(true);
+    console.log('Attempting to fetch customers from localStorage...');
+    
+    const localCustomersRaw = localStorage.getItem('customers');
+    if (localCustomersRaw) {
       try {
-        console.log('Making API call to /api/customers');
-        const response = await axios.get('/customers', { withCredentials: true });
-        console.log('Backend response status:', response.status);
-        console.log('Backend response headers:', response.headers);
-        console.log('Backend response data:', response.data);
-        console.log('Backend response data type:', typeof response.data);
-        console.log('Is response.data an array?', Array.isArray(response.data));
-        
-        // Ensure response.data is an array
-        let customerData;
-        if (Array.isArray(response.data)) {
-          customerData = response.data;
-          console.log('Using response.data directly as array');
-        } else if (response.data && response.data.customers && Array.isArray(response.data.customers)) {
-          customerData = response.data.customers;
-          console.log('Using response.data.customers as array');
-        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-          customerData = response.data.data;
-          console.log('Using response.data.data as array');
-        } else {
-          // Try to convert to array if it's an object
-          if (typeof response.data === 'object' && response.data !== null) {
-            customerData = Object.values(response.data);
-            console.log('Converted response.data to array using Object.values');
-          } else {
-            customerData = [];
-            console.log('No array found in response, using empty array');
-          }
-        }
-        
-        console.log(`Final customer data count: ${customerData.length}`);
-        if (customerData.length > 0) {
-          console.log('First customer:', customerData[0]);
-        }
-
-        // Clear any existing data first
-        console.log('Clearing existing customer data');
-        setCustomers([]);
-        setFilteredCustomers([]);
-        
-        const uniqueCustomersMap = new Map();
-        const duplicatesRemoved = [];
-
-        customerData.forEach((customer, index) => {
-          console.log(`Processing customer ${index + 1}:`, customer);
-          
-          // Use name and phone for uniqueness check
-          const key = (customer.name || '') + (customer.phone || '');
-          if (uniqueCustomersMap.has(key)) {
-            console.log(`Duplicate customer found: ${customer.name}, ${customer.phone}`);
-            duplicatesRemoved.push(customer);
-          } else {
-            uniqueCustomersMap.set(key, customer);
-          }
-        });
-
-        const uniqueCustomers = Array.from(uniqueCustomersMap.values()).map(customer => ({
-          ...customer,
-          // Ensure all fields are properly formatted and exist
-          id: customer.id || '',
-          name: customer.name || '',
-          phone: customer.phone || '',
-          address: customer.address || '',
-          city: customer.city || '',
-          district: customer.district || '', // Added district
-          state: customer.state || '',
-          postalCode: customer.postalCode || '',
-          landmark: customer.landmark || '', // Added landmark
-          mobileNumber2: customer.mobileNumber2 || '',
-          source: customer.source || '' // Added source
-        }));
-
-        console.log(`Final unique customers count: ${uniqueCustomers.length}`);
-
-        if (duplicatesRemoved.length > 0) {
-          console.log(`Removed ${duplicatesRemoved.length} duplicate customer entries`);
-
-          setTimeout(() => {
-            alert(`Removed ${duplicatesRemoved.length} duplicate customer entries to ensure data integrity.`);
-          }, 500);
-        }
-
-        // Force update the state
-        setCustomers(uniqueCustomers);
-        setFilteredCustomers(uniqueCustomers);
-        localStorage.setItem('customers', JSON.stringify(uniqueCustomers));
-        
-        console.log('Customer list updated successfully');
-
-      } catch (err: any) { // Type 'any' for error to access response
-        console.error('Error fetching customers from backend:', err);
-        alert(`Error fetching customers: ${err.response?.data?.message || err.message || 'Unknown error'}`);
+        const localCustomers = JSON.parse(localCustomersRaw).map(normalizeCustomerData);
+        setCustomers(localCustomers);
+        setFilteredCustomers(localCustomers);
+      } catch (e) {
+        console.error("Error parsing customers from localStorage", e);
         setCustomers([]);
         setFilteredCustomers([]);
       }
-    } catch (err: any) { // Type 'any' for error
-      console.error('Error fetching customers:', err);
-      alert(`Error fetching customers: ${err.response?.data?.message || err.message || 'Unknown error'}`);
-    } finally {
-      setIsLoading(false);
+    } else {
+      setCustomers([]);
+      setFilteredCustomers([]);
     }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setIsLoading(false);
   };
 
   // Type for values received from Ant Design Form
   interface FormValues extends Omit<CustomerData, 'id'> {}
 
-  const handleSubmit = async (values: FormValues) => { // Use FormValues type
+  const handleSubmit = async (values: FormValues) => {
     setSaveError(null);
     setIsSaving(true);
 
     try {
-      console.log('Saving customer data:', values);
-
       const normalizedData = {
         ...values,
-        state: standardizeState(values.state)
+        state: standardizeState(values.state),
       };
 
       let updatedCustomers;
 
       if (editingCustomer) {
-        console.log(`Updating customer with ID: ${editingCustomer.id}`);
-
-        await axios.put(`/api/customers/${editingCustomer.id}`, normalizedData, {
-          withCredentials: true
-        });
-        console.log('Backend update successful');
-
-        updatedCustomers = customers.map(customer =>
-          customer.id === editingCustomer.id ? { ...normalizedData, id: editingCustomer.id } : customer
-        );
+        // Update existing customer locally
+        console.log("Local mode: updating customer locally.");
+        const updatedCustomer = { ...editingCustomer, ...normalizedData };
+        updatedCustomers = customers.map(c => c.id === editingCustomer.id ? updatedCustomer : c);
+        message.success('Customer updated successfully!');
       } else {
-        console.log('Creating new customer');
-
-        const isDuplicate = customers.some(customer => {
-          return (
+        // Create new customer
+        const isDuplicate = customers.some(
+          (customer) =>
+            customer.name &&
+            normalizedData.name &&
             customer.name.toLowerCase() === normalizedData.name.toLowerCase() &&
             customer.phone === normalizedData.phone
-          );
-        });
+        );
 
         if (isDuplicate) {
           alert('A customer with this name and mobile number already exists!');
@@ -294,37 +222,27 @@ const CustomerScreen = () => {
           return;
         }
 
-        const response = await axios.post('/customers', normalizedData, {
-          withCredentials: true
-        });
-        const newCustomer = response.data;
-        console.log('Backend create successful');
-
+        // Create new customer locally
+        console.log("Local mode: creating customer locally.");
+        const newCustomer: CustomerData = {
+          ...normalizedData,
+          id: 'local-' + Date.now().toString(), // Create a temporary local ID
+          createdAt: new Date().toISOString(),
+        };
         updatedCustomers = [...customers, newCustomer];
+        message.success('Customer added successfully!');
       }
 
       localStorage.setItem('customers', JSON.stringify(updatedCustomers));
-
-      window.dispatchEvent(new CustomEvent('customersUpdated'));
-
+      window.dispatchEvent(new Event('customersUpdated')); // Notify other components
+      setCustomers(updatedCustomers);
+      setFilteredCustomers(updatedCustomers);
       resetForm();
-
-      try {
-        const response = await axios.get('/customers', { withCredentials: true });
-        if (response.data) {
-          setCustomers(response.data);
-          setFilteredCustomers(response.data);
-          localStorage.setItem('customers', JSON.stringify(response.data));
-        }
-      } catch (err) {
-        console.error('Error refreshing customers from backend:', err);
-        setCustomers(updatedCustomers);
-        setFilteredCustomers(updatedCustomers);
-      }
     } catch (err: any) {
       console.error('Error saving customer:', err);
-      console.error('Error response:', err.response);
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to save customer. Please try again.';
+      const errorMessage =
+        err.message ||
+        'Failed to save customer. Please try again.';
       setSaveError(errorMessage);
       alert(`Error: ${errorMessage}`);
     } finally {
@@ -334,75 +252,342 @@ const CustomerScreen = () => {
 
   const handleEdit = (customer: CustomerData) => {
     setEditingCustomer(customer);
-    // ALIGN FORM VALUES TO CUSTOMERDATA INTERFACE
-    const values = {
-      name: customer.name,
-      address: customer.address,
-      city: customer.city,
-      district: customer.district,
+    form.setFieldsValue({
+      ...customer,
       state: standardizeState(customer.state),
-      postalCode: customer.postalCode,
-      landmark: customer.landmark,
-      phone: customer.phone,
-      mobileNumber2: customer.mobileNumber2,
-      source: customer.source
-    };
-    setFormData(values);
-    form.setFieldsValue(values);
+    });
     setShowAddForm(true);
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
-      let updatedCustomers;
       try {
-        await axios.delete(`/api/customers/${id}`, {
-          withCredentials: true
-        });
-        console.log('Backend delete successful');
-
-        try {
-          const response = await axios.get('/customers', { withCredentials: true });
-          if (response.data) {
-            const freshCustomers = response.data;
-            setCustomers(freshCustomers);
-            // ALIGN FILTERING TO CUSTOMERDATA INTERFACE
-            setFilteredCustomers(freshCustomers.filter(customer =>
-              (customer.name && customer.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-              (customer.phone && customer.phone.includes(searchTerm)) ||
-              (customer.city && customer.city.toLowerCase().includes(searchTerm.toLowerCase())) ||
-              (customer.state && customer.state.toLowerCase().includes(searchTerm.toLowerCase()))
-            ));
-            localStorage.setItem('customers', JSON.stringify(freshCustomers));
-          }
-        } catch (err) {
-          console.error('Error refreshing customers from backend:', err);
-          updatedCustomers = customers.filter(customer => customer.id !== id);
-          localStorage.setItem('customers', JSON.stringify(updatedCustomers));
-          setCustomers(updatedCustomers);
-          // ALIGN FILTERING TO CUSTOMERDATA INTERFACE
-          setFilteredCustomers(updatedCustomers.filter(customer =>
-            (customer.name && customer.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (customer.phone && customer.phone.includes(searchTerm)) ||
-            (customer.city && customer.city.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (customer.state && customer.state.toLowerCase().includes(searchTerm.toLowerCase()))
-          ));
-        }
-
-        window.dispatchEvent(new CustomEvent('customersUpdated'));
-
-      } catch (err) {
+        const updatedCustomers = customers.filter((customer) => customer.id !== id);
+        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+        window.dispatchEvent(new Event('customersUpdated'));
+        setCustomers(updatedCustomers);
+        message.success('Customer has been deleted.');
+      } catch (err: any) {
         console.error('Error deleting customer:', err);
-        alert(`Error deleting customer: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        message.error('Failed to delete customer.');
       }
     }
   };
 
+  const handleImport = async () => {
+    if (!selectedFile) {
+      message.error('Please select a file to import.');
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      const data = await selectedFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const worksheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[worksheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+
+      if (!jsonData || jsonData.length < 2) {
+        message.warning('No data found in the Excel file.');
+        setIsImporting(false);
+        return;
+      }
+
+      const rawHeaders = jsonData[0] as string[];
+      const headers = rawHeaders.map(h => (h ? h.toString().trim().toUpperCase() : ''));
+      const rows = jsonData.slice(1);
+
+      const getColIndex = (keyword: string) => headers.findIndex(h => h.includes(keyword.toUpperCase()));
+
+      const nameIndex = getColIndex('CUSTOMER NAME');
+      const addressIndex = getColIndex('HOUSE NO./ FLAT NO./ STREET NO.');
+      const cityIndex = getColIndex('CITY/TOWN/VILLAGE');
+      const districtIndex = getColIndex('P.O/DISTRICT');
+      const stateIndex = getColIndex('STATE');
+      const postalCodeIndex = getColIndex('PIN CODE');
+      const landmarkIndex = getColIndex('LANDMARK');
+      const mobile1Index = getColIndex('MOBILE NO.');
+      const mobile2Index = headers.findIndex((h, idx) => idx > mobile1Index && h.includes('MOBILE NO. 2'));
+      const sourceIndex = getColIndex('SOURCE');
+
+      if (nameIndex === -1 || mobile1Index === -1) {
+        message.error('Required columns (CUSTOMER NAME and MOBILE NO.) not found in the Excel file.');
+        setIsImporting(false);
+        return;
+      }
+
+      const customersToImport = rows
+        .map((row, rowIndex) => {
+          const getCellValue = (index: number, defaultValue = '') => {
+            if (index === -1 || !row || row[index] === undefined) {
+              return defaultValue;
+            }
+            return String(row[index]).trim();
+          };
+
+          return {
+            id: Date.now().toString() + rowIndex,
+            createdAt: new Date().toISOString(),
+            name: getCellValue(nameIndex),
+            phone: getCellValue(mobile1Index),
+            address: getCellValue(addressIndex),
+            city: getCellValue(cityIndex),
+            district: getCellValue(districtIndex),
+            state: getCellValue(stateIndex),
+            postalCode: getCellValue(postalCodeIndex),
+            landmark: getCellValue(landmarkIndex),
+            mobileNumber2: getCellValue(mobile2Index),
+            source: getCellValue(sourceIndex),
+          };
+        })
+        .filter(customer => customer.name && customer.phone);
+
+      if (customersToImport.length === 0) {
+        message.warning('No valid customer data found in the file.');
+        setIsImporting(false);
+        return;
+      }
+
+      const existingCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
+      const mergedCustomers = [...existingCustomers];
+      let importedCount = 0;
+
+      customersToImport.forEach(newCustomer => {
+        const isDuplicate = existingCustomers.some(
+          (existing) =>
+            existing.name.toLowerCase() === newCustomer.name.toLowerCase() &&
+            existing.phone === newCustomer.phone
+        );
+
+        if (!isDuplicate) {
+          mergedCustomers.push(newCustomer);
+          importedCount++;
+        }
+      });
+
+      localStorage.setItem('customers', JSON.stringify(mergedCustomers));
+      setCustomers(mergedCustomers);
+      setFilteredCustomers(mergedCustomers);
+
+      message.success(`Successfully imported ${importedCount} new customers.`);
+      setShowImportModal(false);
+    } catch (error) {
+      console.error('Error importing customers:', error);
+      message.error('Failed to import customers. Please check the file and try again.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // ======================================================================
+  // handleUpdateCustomers FUNCTION
+  // ======================================================================
+  const handleUpdateCustomers = async () => {
+    if (!selectedFile) {
+      message.warning('Please select a file first');
+      return;
+    }
+
+    console.log('Starting update process with file:', selectedFile.name);
+    setIsImporting(true);
+
+    try {
+      const data = await selectedFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const worksheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[worksheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+
+      if (!jsonData || jsonData.length < 2) {
+        message.warning('No data found in the Excel file or file contains only headers.');
+        setIsImporting(false);
+        return;
+      }
+
+      const rawHeaders = jsonData[0] as string[];
+      const clean = (text = '') => text.replace(/\s+/g, ' ').replace(/[\u200B-\u200D\uFEFF]/g, '').trim().toUpperCase();
+      const headers = rawHeaders.map(h => clean(h));
+      console.log('Detected headers:', headers);
+      const rows = jsonData.slice(1);
+      
+      // Fix merged DISTRICT+STATE columns
+      for (let i = 0; i < headers.length; i++) {
+        if (headers[i].includes('P.O/DISTRICT STATE')) {
+          headers[i] = 'P.O/DISTRICT';
+          headers.splice(i + 1, 0, 'STATE');
+          rows.forEach(row => {
+            const cellValue = row[i] || '';
+            const parts = cellValue.split(' ');
+            row[i] = parts.slice(0, -1).join(' ');
+            row.splice(i + 1, 0, parts.slice(-1)[0] || '');
+          });
+          break;
+        }
+      }
+
+      const getColIndex = (keyword: string) => headers.findIndex(h => h.includes(keyword.toUpperCase()));
+
+      const nameIndex = getColIndex('CUSTOMER NAME');
+      const addressIndex = getColIndex('HOUSE NO./ FLAT NO./ STREET NO.');
+      const cityIndex = getColIndex('CITY/TOWN/VILLAGE');
+      const districtIndex = getColIndex('P.O/DISTRICT');
+      const stateIndex = getColIndex('STATE');
+      const postalCodeIndex = getColIndex('PIN CODE');
+      const landmarkIndex = getColIndex('LANDMARK');
+      const mobile1Index = getColIndex('MOBILE NO.');
+      let mobile2Index = -1;
+      if (mobile1Index !== -1) {
+          mobile2Index = headers.findIndex((h, idx) => idx > mobile1Index && h.includes('MOBILE NO. 2'.toUpperCase()));
+          if (mobile2Index === -1) {
+              mobile2Index = headers.findIndex((h, idx) => idx > mobile1Index && h.includes('MOBI'));
+          }
+      }
+      const sourceIndex = getColIndex('SOURCE');
+      
+      if (mobile1Index === -1) {
+        message.error('Required column (MOBILE NO.) not found in the Excel file for updating customers.');
+        setIsImporting(false);
+        return;
+      }
+
+      // Debug: Log the rows data
+      console.log('Rows data:', rows);
+      console.log('Column indices:', {
+        nameIndex,
+        addressIndex,
+        cityIndex,
+        districtIndex,
+        stateIndex,
+        postalCodeIndex,
+        landmarkIndex,
+        mobile1Index,
+        mobile2Index,
+        sourceIndex
+      });
+      
+      const customersToUpdate = rows
+        .filter(row => {
+          const isRowEmpty = !row || row.length === 0 || !row.some(cell => cell !== undefined && cell !== '');
+          return !isRowEmpty;
+        })
+        .map((row, rowIndex) => {
+          const getCellValue = (index: number, defaultValue: string = '') => {
+            if (index === -1 || !row || row[index] === undefined) {
+              return defaultValue;
+            }
+            return String(row[index]).trim();
+          };
+
+          const customer = {
+            name: getCellValue(nameIndex),
+            phone: getCellValue(mobile1Index), // This will be used to match existing customers
+            address: getCellValue(addressIndex),
+            city: getCellValue(cityIndex),
+            district: getCellValue(districtIndex),
+            state: getCellValue(stateIndex),
+            postalCode: getCellValue(postalCodeIndex),
+            landmark: getCellValue(landmarkIndex),
+            mobileNumber2: getCellValue(mobile2Index),
+            source: getCellValue(sourceIndex)
+          };
+          
+          // Debug: Log each customer being processed
+          console.log(`Processing row ${rowIndex}:`, row, '→', customer);
+          
+          return customer;
+        })
+        .filter(customer => customer.phone); // Only update customers with a mobile number
+        
+      // Debug: Log the final customersToUpdate array
+      console.log('Final customers to update:', customersToUpdate);
+
+      if (customersToUpdate.length === 0) {
+        message.warning('No valid customer data with mobile numbers found in the file for updating.');
+        setIsImporting(false);
+        return;
+      }
+
+      // Debug: Log the data being sent
+      console.log('Attempting to update customers:', customersToUpdate);
+      
+      // Always save to localStorage first for immediate UI update
+      const existingCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
+      let updatedCount = 0;
+      
+      // Create a map of existing customers by phone for faster lookup
+      const customerMap = new Map();
+      existingCustomers.forEach((customer: any) => {
+        if (customer.phone) {
+          customerMap.set(customer.phone, customer);
+        }
+      });
+      
+      // Update existing customers or add new ones
+      customersToUpdate.forEach(newCustomer => {
+        if (newCustomer.phone) {
+          const existingCustomer = customerMap.get(newCustomer.phone);
+          if (existingCustomer) {
+            // Update existing customer
+            Object.assign(existingCustomer, newCustomer);
+            updatedCount++;
+          } else {
+            // Add new customer
+            const newCustomerWithId = { ...newCustomer, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
+            existingCustomers.push(newCustomerWithId);
+            updatedCount++;
+          }
+        }
+      });
+      
+      // Save to localStorage
+      localStorage.setItem('customers', JSON.stringify(existingCustomers));
+      
+      // Update state immediately for instant UI update
+      setCustomers(existingCustomers);
+      setFilteredCustomers(existingCustomers);
+      
+      console.log(`Updated ${updatedCount} customers in localStorage`);
+      
+      // Try to send the data to the backend for bulk update (but don't wait for it)
+      axios.post('/customers/bulk-update', customersToUpdate, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000 // 5 second timeout
+      })
+      .then(response => {
+        if (response.status === 200 || response.status === 201) {
+          console.log(`Backend update successful: ${response.data.updatedCount || 0} customers.`);
+          // No need to update UI again since we already did it above
+        }
+      })
+      .catch(apiError => {
+        console.warn('API update failed (but localStorage was already updated):', apiError);
+        // No need to show error message since we already saved to localStorage
+      });
+      
+      // Show success message immediately
+      message.success(`Successfully updated ${updatedCount} customers.`);
+
+      setShowUpdateModal(false);
+      setSelectedFile(null);
+    } catch (error: any) {
+      console.error('Error updating customers:', error);
+      message.error(`Failed to update customers: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+  // ======================================================================
+  // END handleUpdateCustomers FUNCTION
+  // ======================================================================
+
   const resetForm = () => {
-    setFormData(initialFormData);
+    form.resetFields();
     setEditingCustomer(null);
     setShowAddForm(false);
-    form.resetFields();
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -419,1043 +604,368 @@ const CustomerScreen = () => {
       message.warning('Please select a file first');
       return;
     }
-
-    console.log('Starting import process with file:', selectedFile.name);
-    setIsImporting(true);
-
-    try {
-      // Read the file
-      const data = await selectedFile.arrayBuffer();
-      console.log('File read successfully, size:', data.byteLength);
-      
-      const workbook = XLSX.read(data, { type: 'array' });
-      console.log('Workbook created, sheet names:', workbook.SheetNames);
-
-      // Get the first worksheet
-      const worksheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[worksheetName];
-      console.log('Using worksheet:', worksheetName);
-
-      // Convert worksheet to JSON, ensuring we get the header row (header: 1)
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
-      console.log('JSON data converted, first row (headers):', jsonData[0]);
-
-      if (!jsonData || jsonData.length < 2) { // Need at least header + one data row
-        message.warning('No data found in the Excel file or file contains only headers.');
-        setIsImporting(false);
-        return;
-      }
-
-      // Extract headers from the first row and normalize them for easier matching
-      // Headers from the template:
-      // 'CUSTOMER NAME', 'HOUSE NO./ FLAT NO./ STREET NO.', 'CITY/TOWN/VILLAGE',
-      // 'P.O/DISTRICT', 'STATE', 'PIN CODE', 'LANDMARK', 'MOBILE NO.', 'MOBILE NO. 2', 'SOURCE'
-      const rawHeaders = jsonData[0] as string[];
-      console.log('Raw headers:', rawHeaders);
-      
-      const headers = rawHeaders.map(h => {
-        const header = h ? h.toString().trim().toUpperCase() : '';
-        console.log(`Processing header: "${h}" -> "${header}"`);
-        return header;
-      });
-      
-      console.log('Processed headers:', headers);
-      const rows = jsonData.slice(1); // Actual data rows, skipping the header row
-      console.log(`Found ${rows.length} data rows`);
-
-      // --- Dynamic Column Indexing based on template headers ---
-      // This is crucial to match your template precisely.
-      const getColIndex = (keyword: string) => {
-        const index = headers.findIndex(h => h.includes(keyword.toUpperCase()));
-        console.log(`Finding column for "${keyword}": index ${index}`);
-        return index;
-      };
-
-      const nameIndex = getColIndex('CUSTOMER NAME');
-      const addressIndex = getColIndex('HOUSE NO./ FLAT NO./ STREET NO.');
-      const cityIndex = getColIndex('CITY/TOWN/VILLAGE');
-      const districtIndex = getColIndex('P.O/DISTRICT');
-      const stateIndex = getColIndex('STATE');
-      const postalCodeIndex = getColIndex('PIN CODE');
-      const landmarkIndex = getColIndex('LANDMARK');
-
-      // For mobile numbers, find the first and second occurrence
-      const mobile1Index = getColIndex('MOBILE NO.'); // This should catch 'MOBILE NO.'
-      let mobile2Index = -1;
-      if (mobile1Index !== -1) {
-          // Search for 'MOBILE NO. 2' specifically, or a second 'MOBI' if 'MOBILE NO.' is ambiguous
-          mobile2Index = headers.findIndex((h, idx) => idx > mobile1Index && h.includes('MOBILE NO. 2'.toUpperCase()));
-          console.log(`Found MOBILE NO. 2 at index: ${mobile2Index}`);
-          // Fallback if 'MOBILE NO. 2' is not found but another 'MOBI' exists
-          if (mobile2Index === -1) {
-              mobile2Index = headers.findIndex((h, idx) => idx > mobile1Index && h.includes('MOBI'));
-              console.log(`Fallback MOBILE NO. 2 at index: ${mobile2Index}`);
-          }
-      }
-
-      const sourceIndex = getColIndex('SOURCE');
-      
-      // Check if all required columns were found
-      if (nameIndex === -1 || mobile1Index === -1) {
-        console.error('Required columns not found:', { nameIndex, mobile1Index });
-        message.error('Required columns (CUSTOMER NAME and MOBILE NO.) not found in the Excel file.');
-        setIsImporting(false);
-        return;
-      }
-
-      // Debug logging for indices found
-      console.log('Detected Headers (Normalized):', headers);
-      console.log('nameIndex:', nameIndex);
-      console.log('addressIndex:', addressIndex);
-      console.log('cityIndex:', cityIndex);
-      console.log('districtIndex:', districtIndex);
-      console.log('stateIndex:', stateIndex);
-      console.log('postalCodeIndex:', postalCodeIndex);
-      console.log('landmarkIndex:', landmarkIndex);
-      console.log('mobile1Index (phone):', mobile1Index);
-      console.log('mobile2Index (mobileNumber2):', mobile2Index);
-      console.log('sourceIndex:', sourceIndex);
-
-      // Filter out empty rows and map to CustomerData interface
-      console.log('Processing rows...');
-      const customersToImport: CustomerData[] = rows
-        .filter(row => {
-          // Filter out truly empty rows
-          const isRowEmpty = !row || row.length === 0 || !row.some(cell => cell !== undefined && cell !== '');
-          if (isRowEmpty) console.log('Skipping empty row');
-          return !isRowEmpty;
-        })
-        .map((row, rowIndex) => {
-          console.log(`Processing row ${rowIndex + 1}:`, row);
-          
-          // Helper to safely get string value from a cell
-          const getCellValue = (index: number, defaultValue: string = '') => {
-            if (index === -1 || !row || row[index] === undefined) {
-              console.log(`Column ${index} not found or empty, using default value`);
-              return defaultValue;
-            }
-            const value = String(row[index]).trim();
-            console.log(`Column ${index} value: "${value}"`);
-            return value;
-          };
-
-          // Create customer object with proper field names that match backend expectations
-          const customer = {
-            name: getCellValue(nameIndex),
-            phone: getCellValue(mobile1Index),
-            address: getCellValue(addressIndex),
-            city: getCellValue(cityIndex),
-            district: getCellValue(districtIndex),
-            state: getCellValue(stateIndex),
-            postalCode: getCellValue(postalCodeIndex),
-            landmark: getCellValue(landmarkIndex),
-            mobileNumber2: getCellValue(mobile2Index),
-            source: getCellValue(sourceIndex)
-          };
-          
-          // Log each customer for debugging
-          console.log(`Processed customer ${rowIndex + 1}:`, customer);
-          
-          return customer;
-        })
-        .filter((customer, index) => {
-          // Only import customers with required fields: name and phone
-          const name = customer.name.trim();
-          const phone = customer.phone.trim();
-          const isValid = name && phone;
-          
-          if (!isValid) {
-            console.log(`Skipping customer ${index + 1} - missing required fields:`, { name, phone });
-          }
-          
-          return isValid;
-        });
-        
-      console.log(`Found ${customersToImport.length} valid customers to import`);
-
-      // Debug logging
-      console.log('Total rows in Excel:', rows.length);
-      console.log('Valid customers to import:', customersToImport.length);
-
-      if (customersToImport.length === 0) {
-        message.warning('No valid customer data found in the file. Make sure the file has the correct headers and at least one customer with name and mobile number.');
-        setIsImporting(false);
-        return;
-      }
-
-      // Send the data to the backend
-      console.log('Sending customers to backend:', customersToImport);
-      
-      // Try a different approach - send the processed data directly as JSON
-      console.log('Preparing to send', customersToImport.length, 'customers to backend');
-      
-      // First, let's try with just the file
-      const fileFormData = new FormData();
-      fileFormData.append('file', selectedFile);
-      
-     
-      try {
-        console.log('First attempt: Sending file only to /api/customers/bulk-import');
-        try {
-          const fileResponse = await axios.post('/api/customers/bulk-import', fileFormData, {
-            withCredentials: true,
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          });
-          
-          console.log('File import response status:', fileResponse.status);
-          console.log('File import response data:', fileResponse.data);
-          
-          if (fileResponse.status === 200 && fileResponse.data && fileResponse.data.success) {
-            console.log('File import successful');
-            // Continue with the rest of the process
-          } else {
-            console.log('File import not successful, trying JSON data');
-            throw new Error('File import not successful');
-          }
-        } catch (fileError) {
-          console.log('File import failed, trying JSON data approach');
-          
-          // If file upload fails, try with JSON data
-          console.log('Second attempt: Sending JSON data to /api/customers/bulk-import');
-          try {
-            const jsonResponse = await axios.post('/api/customers/bulk-import', jsonData, {
-              withCredentials: true,
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            console.log('JSON import response status:', jsonResponse.status);
-            console.log('JSON import response data:', jsonResponse.data);
-            
-            if (jsonResponse.status === 200 && jsonResponse.data && jsonResponse.data.success) {
-              console.log('JSON import successful');
-            } else {
-              throw new Error('JSON import not successful');
-            }
-          } catch (jsonError) {
-            console.error('Both bulk import methods failed:', jsonError);
-            
-            // Fallback: Import customers one by one
-            console.log('Fallback: Importing customers one by one');
-            
-            let successCount = 0;
-            let failureCount = 0;
-            
-            // Process in batches to avoid overwhelming the server
-            const batchSize = 10;
-            for (let i = 0; i < customersToImport.length; i += batchSize) {
-              const batch = customersToImport.slice(i, i + batchSize);
-              console.log(`Processing batch ${Math.floor(i/batchSize) + 1} with ${batch.length} customers`);
-              
-              // Process each customer in the batch in parallel
-              const batchPromises = batch.map(async (customer) => {
-                try {
-                  // Log the customer data before sending
-                  console.log(`Sending customer data for ${customer.name}:`, customer);
-                  
-                  // Make sure we have the required field (name only)
-                  if (!customer.name) {
-                    console.error(`Missing required field for customer: name=${!!customer.name}`);
-                    return false;
-                  }
-                  
-                  // Generate a placeholder email for all customers
-                  const email = customer.email || `${customer.name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')}@placeholder.com`;
-                  
-                  // Create a clean customer object with only the fields our backend expects
-                  const cleanCustomer = {
-                    name: customer.name,
-                    email: email,
-                    phone: customer.phone || '',
-                    address: customer.address || '',
-                    city: customer.city || '',
-                    district: customer.district || '',
-                    state: customer.state || '',
-                    postalCode: customer.postalCode || '',
-                    landmark: customer.landmark || '',
-                    mobileNumber2: customer.mobileNumber2 || ''
-                  };
-                  
-                  console.log(`Clean customer data for ${customer.name}:`, cleanCustomer);
-                  console.log(`Customer data keys:`, Object.keys(cleanCustomer));
-                  console.log(`Customer data values:`, Object.values(cleanCustomer));
-                  
-                  // Double-check that createdAt is included
-                  if (!cleanCustomer.createdAt) {
-                    console.error(`createdAt is missing for customer ${customer.name}`);
-                    cleanCustomer.createdAt = new Date().toISOString();
-                    cleanCustomer.updatedAt = new Date().toISOString();
-                    console.log(`Added timestamps to customer data:`, cleanCustomer);
-                  }
-                  
-                  const response = await axios.post('/customers', cleanCustomer, {
-                    withCredentials: true,
-                    headers: {
-                      'Content-Type': 'application/json'
-                    }
-                  });
-                  
-                  if (response.status === 200 || response.status === 201) {
-                    console.log(`Successfully imported customer: ${customer.name}`);
-                    return true;
-                  } else {
-                    console.error(`Failed to import customer: ${customer.name}, status: ${response.status}`);
-                    return false;
-                  }
-                } catch (error: any) {
-                  console.error(`Error importing customer ${customer.name}:`, error);
-                  
-                  if (error.response) {
-                    // The request was made and the server responded with a status code
-                    // that falls out of the range of 2xx
-                    console.error(`Error response status: ${error.response.status}`);
-                    console.error(`Error response data:`, error.response.data);
-                    console.error(`Error response headers:`, error.response.headers);
-                  } else if (error.request) {
-                    // The request was made but no response was received
-                    console.error(`No response received:`, error.request);
-                  } else {
-                    // Something happened in setting up the request that triggered an Error
-                    console.error(`Request setup error:`, error.message);
-                  }
-                  
-                  return false;
-                }
-              });
-              
-              // Wait for all customers in the batch to be processed
-              const batchResults = await Promise.all(batchPromises);
-              successCount += batchResults.filter(result => result).length;
-              failureCount += batchResults.filter(result => !result).length;
-              
-              // Small delay between batches to avoid overwhelming the server
-              if (i + batchSize < customersToImport.length) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-              }
-            }
-            
-            console.log(`Individual import results: ${successCount} successful, ${failureCount} failed`);
-            
-            if (successCount === 0) {
-              throw new Error('All individual imports failed');
-            }
-            
-            // Create a mock response for the rest of the process
-            jsonResponse = {
-              status: 200,
-              data: {
-                success: true,
-                importedCount: successCount,
-                message: `Imported ${successCount} customers individually (${failureCount} failed)`
-              }
-            };
-          }
-        }
-        
-        // If we get here, one of the methods worked
-        const response = fileResponse || jsonResponse;
-        
-        console.log('Import API response status:', response.status);
-        console.log('Import API response headers:', response.headers);
-        console.log('Import API response data:', response.data);
-
-        console.log('Backend response:', response.data);
-        console.log('Backend response status:', response.status);
-        
-        // Check if the response indicates success
-        if (response.status === 200 || response.status === 201) {
-          // Show success message
-          const importedCount = response.data.importedCount || response.data.count || customersToImport.length;
-          message.success(`Successfully imported ${importedCount} customers`);
-          
-          // Refresh the customer list
-          console.log('Refreshing customer list...');
-          
-          // Force a complete refresh by clearing the cache first
-          localStorage.removeItem('customers');
-          
-          // Fetch fresh data from the backend
-          await fetchCustomers();
-          console.log('Customer list refreshed');
-          
-          // Wait a bit more to ensure the state is updated
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Double-check by directly fetching again
-          console.log('Making direct API call to verify import...');
-          const directResponse = await axios.get('/customers', { withCredentials: true });
-          console.log('Direct fetch response status:', directResponse.status);
-          console.log('Direct fetch response data:', directResponse.data);
-          
-          // Try multiple ways to get the customer data
-          let directCustomers;
-          if (Array.isArray(directResponse.data)) {
-            directCustomers = directResponse.data;
-            console.log('Using directResponse.data as array');
-          } else if (directResponse.data && directResponse.data.customers && Array.isArray(directResponse.data.customers)) {
-            directCustomers = directResponse.data.customers;
-            console.log('Using directResponse.data.customers as array');
-          } else if (directResponse.data && directResponse.data.data && Array.isArray(directResponse.data.data)) {
-            directCustomers = directResponse.data.data;
-            console.log('Using directResponse.data.data as array');
-          } else {
-            // Try to convert to array if it's an object
-            if (typeof directResponse.data === 'object' && directResponse.data !== null) {
-              directCustomers = Object.values(directResponse.data);
-              console.log('Converted directResponse.data to array using Object.values');
-            } else {
-              directCustomers = [];
-              console.log('No array found in direct response, using empty array');
-            }
-          }
-          
-          console.log(`Direct fetch returned ${directCustomers.length} customers`);
-          
-          // Check if we have any customers at all
-          if (directCustomers.length === 0) {
-            console.error('No customers found in the database after import!');
-            message.error('Import appeared successful but no customers were found in the database. Please check with your system administrator.');
-          } else {
-            console.log('First few customers:', directCustomers.slice(0, 3));
-          }
-          
-          // Update state with direct fetch results
-          setCustomers(directCustomers);
-          setFilteredCustomers(directCustomers);
-          localStorage.setItem('customers', JSON.stringify(directCustomers));
-          
-          // Trigger a custom event to notify other components
-          console.log('Dispatching customersUpdated event');
-          window.dispatchEvent(new CustomEvent('customersUpdated'));
-          
-          // Double-check that the customer list was updated
-          console.log(`Updated customer count: ${directCustomers.length}`);
-          
-          // Show a more detailed success message
-          message.success(`Successfully imported and displayed ${importedCount} customers`);
-        } else {
-          // Handle case where backend indicates no imports were successful
-          console.warn('Backend returned non-success status:', response.status);
-          message.warning(`No customers were imported. Server returned status: ${response.status}`);
-        }
-      } catch (apiError: any) {
-        console.error('API call failed:', apiError);
-        
-        if (apiError.response) {
-          // The request was made and the server responded with a status code
-          // that falls out of the range of 2xx
-          console.error('Error response data:', apiError.response.data);
-          console.error('Error response status:', apiError.response.status);
-          message.error(`Import failed: ${apiError.response.data?.message || apiError.response.data?.error || 'Server error'}`);
-        } else if (apiError.request) {
-          // The request was made but no response was received
-          console.error('No response received:', apiError.request);
-          message.error('Import failed: No response from server. Please check your connection.');
-        } else {
-          // Something happened in setting up the request that triggered an Error
-          console.error('Request setup error:', apiError.message);
-          message.error(`Import failed: ${apiError.message || 'Unknown error'}`);
-        }
-        
-        // Even if the API call fails, we should still try to refresh the customer list
-        // in case some customers were imported before the error occurred
-        await fetchCustomers();
-      }
-
-      // Close the modal and reset state
-      setShowImportModal(false);
-      setSelectedFile(null);
-    } catch (error: any) {
-      console.error('Error importing customers:', error);
-      
-      // More detailed error logging
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error('Error response data:', error.response.data);
-        console.error('Error response status:', error.response.status);
-        console.error('Error response headers:', error.response.headers);
-        message.error(`Import failed: ${error.response.data?.message || error.response.data?.error || 'Server error'}`);
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error('Error request:', error.request);
-        message.error('Import failed: No response from server. Please check your connection.');
-      } else {
-        // Something happened in setting up the request that triggered an Error
-        console.error('Error message:', error.message);
-        message.error(`Import failed: ${error.message || 'Unknown error'}`);
-      }
-    } finally {
-      setIsImporting(false);
-    }
-  };
-  // ======================================================================
-  // END REWRITTEN handleImportCustomers FUNCTION
-  // ======================================================================
-
-  const handleDownloadTemplate = () => {
-    // Create a new workbook
-    const wb = XLSX.utils.book_new();
-
-    // Define the headers - THESE ARE THE EXACT HEADERS YOUR IMPORT FUNCTION WILL LOOK FOR
-    const headers = [
-      'CUSTOMER NAME',
-      'HOUSE NO./ FLAT NO./ STREET NO.',
-      'CITY/TOWN/VILLAGE',
-      'P.O/DISTRICT',
-      'STATE',
-      'PIN CODE',
-      'LANDMARK',
-      'MOBILE NO.', // Primary mobile number
-      'MOBILE NO. 2', // Secondary mobile number
-      'SOURCE'
-    ];
-
-    // Create a worksheet with the headers
-    const ws = XLSX.utils.aoa_to_sheet([headers]);
-
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 25 }, // CUSTOMER NAME
-      { wch: 30 }, // HOUSE NO./ FLAT NO./ STREET NO.
-      { wch: 20 }, // CITY/TOWN/VILLAGE
-      { wch: 15 }, // P.O/DISTRICT
-      { wch: 15 }, // STATE
-      { wch: 10 }, // PIN CODE
-      { wch: 20 }, // LANDMARK
-      { wch: 15 }, // MOBILE NO.
-      { wch: 15 }, // MOBILE NO. 2
-      { wch: 15 }  // SOURCE
-    ];
-
-    // Add the worksheet to the workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Customer Template");
-
-    // Create a second worksheet with instructions
-    const instructionsData = [
-      ['Customer Import Instructions'],
-      [''],
-      ['1. Fill in the customer details in the "Customer Template" sheet'],
-      ['2. Do not modify the column headers (use the exact headers provided)'],
-      ['3. Required fields: CUSTOMER NAME and MOBILE NO.'],
-      ['4. MOBILE NO. is mandatory and should be a 10-digit number'],
-      ['5. STATE should be in proper format (e.g., Maharashtra, Delhi)'],
-      ['6. PIN CODE should be a 6-digit number'],
-      ['7. Valid source values: Website, Reference, Social Media, Walk-in, Other'],
-      ['8. Save the file as Excel (.xlsx) format before importing']
-    ];
-
-    const instructionsWs = XLSX.utils.aoa_to_sheet(instructionsData);
-    instructionsWs['!cols'] = [{ wch: 70 }];
-    XLSX.utils.book_append_sheet(wb, instructionsWs, "Instructions");
-
-    // Save the workbook
-    XLSX.writeFile(wb, "customer_import_template.xlsx");
-
-    // Show success message
-    message.success('Template downloaded successfully');
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Customer Management</h1>
-          <p className="text-gray-600">Manage your customer database</p>
-        </div>
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-8">
+      <div className="container mx-auto">
+        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8">
+          <PageHeader title="Customer Management" subtitle="Manage your customer database" />
 
-        {/* Action Buttons */}
-        <div className="mb-6 flex flex-wrap gap-3">
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setShowAddForm(!showAddForm)}
-            size="large"
-          >
-            {showAddForm ? 'Hide Form' : 'Add New Customer'}
-          </Button>
+          <ControlPanel
+            showAddForm={showAddForm}
+            onAddClick={() => setShowAddForm(!showAddForm)}
+            onUpdateClick={() => {
+              const localData = localStorage.getItem('customers');
+              const customerCount = localData ? JSON.parse(localData).length : 0;
+              console.log(`--- DEBUG: localStorage 'customers' count ---`);
+              console.log(`${customerCount} customers found.`);
+              console.log("------------------------------------");
+              message.info(`${customerCount} customers found in local storage.`);
+              setShowUpdateModal(true)
+            }}
+            searchTerm={searchTerm}
+            onSearchChange={(e) => setSearchTerm(e.target.value || '')}
+            onDebugClick={() => {
+              const localData = localStorage.getItem('customers');
+              console.log("--- DEBUG: localStorage 'customers' ---");
+              if (localData) {
+                try {
+                  console.log(JSON.parse(localData));
+                } catch (e) {
+                  console.log("Could not parse JSON, showing raw data:");
+                  console.log(localData);
+                }
+              } else {
+                console.log("No 'customers' item found in localStorage.");
+              }
+              console.log("------------------------------------");
+              message.info('LocalStorage content logged to developer console (F12)');
+            }}
+          />
 
-          <Button
-            type="default"
-            icon={<DownloadOutlined />}
-            onClick={handleDownloadTemplate}
-            size="large"
-            style={{ borderColor: '#1890ff', color: '#1890ff' }}
-          >
-            Download Template
-          </Button>
-
-          <Button
-            type="default"
-            icon={<ImportOutlined />}
-            onClick={() => setShowImportModal(true)}
-            size="large"
-            style={{ backgroundColor: '#52c41a', color: 'white', borderColor: '#52c41a' }}
-          >
-            Import Customers
-          </Button>
-        </div>
-
-        {/* Add/Edit Customer Form */}
-        {showAddForm && (
-          <Card
-            className="mb-6"
+          {/* Add/Edit Customer Form */}
+          <Modal
             title={editingCustomer ? 'Edit Customer' : 'Add New Customer'}
-            extra={editingCustomer && (
-              <Button
-                icon={<CloseOutlined />}
-                onClick={resetForm}
-              >
-                Cancel Edit
-              </Button>
-            )}
+            open={showAddForm}
+            onCancel={resetForm}
+            footer={null}
+            width={800}
+            draggable
           >
-            <Typography.Paragraph type="secondary">
-              {editingCustomer ? 'Update customer information' : 'Fill in the customer details below'}
-            </Typography.Paragraph>
-
-            {saveError && (
-              <Alert
-                message={saveError}
-                type="error"
-                className="mb-4"
-                showIcon
-                closable
+            {showAddForm && (
+              <CustomerForm
+                form={form}
+                editingCustomer={editingCustomer}
+                isSaving={isSaving}
+                saveError={saveError}
+                onFinish={handleSubmit}
+                onCancel={resetForm}
               />
             )}
+          </Modal>
 
-            <Form
-              form={form}
-              layout="vertical"
-              onFinish={handleSubmit}
-              className="customer-form"
-              // Set initial values from formData when form is shown or editingCustomer changes
-              initialValues={formData}
-            >
-              <Row gutter={16}>
-                <Col xs={24} sm={12}>
-                  <Form.Item
-                    label="Customer Name"
-                    name="name" // ALIGNED FIELD NAME
-                    rules={[{ required: true, message: 'Please input customer name!' }]}
-                  >
-                    <Input
-                      name="name" // ALIGNED FIELD NAME
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      prefix={<UserOutlined />}
-                      placeholder="Enter customer name"
-                    />
-                  </Form.Item>
-                </Col>
+          {/* The old search bar is now removed as it's integrated into the control panel above */}
 
-                <Col xs={24} sm={12}>
-                  <Form.Item
-                    label="Mobile Number 1"
-                    name="phone" // ALIGNED FIELD NAME
-                    rules={[{ required: true, message: 'Please input mobile number!' }]}
-                  >
-                    <Input
-                      type="tel"
-                      name="phone" // ALIGNED FIELD NAME
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      placeholder="Enter primary mobile number"
-                    />
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={12}>
-                  <Form.Item label="Mobile Number 2" name="mobileNumber2"> {/* ALIGNED FIELD NAME */}
-                    <Input
-                      type="tel"
-                      name="mobileNumber2" // ALIGNED FIELD NAME
-                      value={formData.mobileNumber2}
-                      onChange={handleInputChange}
-                      placeholder="Enter secondary mobile number"
-                    />
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={12}>
-                  <Form.Item label="Source" name="source">
-                    <Input
-                      name="source"
-                      value={formData.source}
-                      onChange={handleInputChange}
-                      placeholder="Enter source"
-                    />
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={12}>
-                  <Form.Item label="House/Flat/Street No." name="address"> {/* ALIGNED FIELD NAME */}
-                    <Input
-                      name="address" // ALIGNED FIELD NAME
-                      value={formData.address}
-                      onChange={handleInputChange}
-                      placeholder="Enter house/flat/street number"
-                    />
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={12}>
-                  <Form.Item label="City/Town/Village" name="city">
-                    <Input
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      placeholder="Enter city/town/village"
-                    />
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={12}>
-                  <Form.Item label="P.O/District" name="district">
-                    <Input
-                      name="district"
-                      value={formData.district}
-                      onChange={handleInputChange}
-                      placeholder="Enter district"
-                    />
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={12}>
-                  <Form.Item label="State" name="state">
-                    <Select
-                      value={formData.state}
-                      onChange={(value) => handleInputChange({ target: { name: 'state', value } } as any)}
-                      placeholder="Select a state"
-                      showSearch
-                      optionFilterProp="children"
-                      filterOption={(input, option) =>
-                        (option?.children as unknown as string)
-                          .toLowerCase()
-                          .includes(input.toLowerCase())
-                      }
-                    >
-                      <Select.Option value="">Select a state</Select.Option>
-                      <Select.Option value="Andhra Pradesh">Andhra Pradesh</Select.Option>
-                      <Select.Option value="Arunachal Pradesh">Arunachal Pradesh</Select.Option>
-                      <Select.Option value="Assam">Assam</Select.Option>
-                      <Select.Option value="Bihar">Bihar</Select.Option>
-                      <Select.Option value="Chhattisgarh">Chhattisgarh</Select.Option>
-                      <Select.Option value="Goa">Goa</Select.Option>
-                      <Select.Option value="Gujarat">Gujarat</Select.Option>
-                      <Select.Option value="Haryana">Haryana</Select.Option>
-                      <Select.Option value="Himachal Pradesh">Himachal Pradesh</Select.Option>
-                      <Select.Option value="Jharkhand">Jharkhand</Select.Option>
-                      <Select.Option value="Karnataka">Karnataka</Select.Option>
-                      <Select.Option value="Kerala">Kerala</Select.Option>
-                      <Select.Option value="Madhya Pradesh">Madhya Pradesh</Select.Option>
-                      <Select.Option value="Maharashtra">Maharashtra</Select.Option>
-                      <Select.Option value="Manipur">Manipur</Select.Option>
-                      <Select.Option value="Meghalaya">Meghalaya</Select.Option>
-                      <Select.Option value="Mizoram">Mizoram</Select.Option>
-                      <Select.Option value="Nagaland">Nagaland</Select.Option>
-                      <Select.Option value="Odisha">Odisha</Select.Option>
-                      <Select.Option value="Punjab">Punjab</Select.Option>
-                      <Select.Option value="Rajasthan">Rajasthan</Select.Option>
-                      <Select.Option value="Sikkim">Sikkim</Select.Option>
-                      <Select.Option value="Tamil Nadu">Tamil Nadu</Select.Option>
-                      <Select.Option value="Telangana">Telangana</Select.Option>
-                      <Select.Option value="Tripura">Tripura</Select.Option>
-                      <Select.Option value="Uttar Pradesh">Uttar Pradesh</Select.Option>
-                      <Select.Option value="Uttarakhand">Uttarakhand</Select.Option>
-                      <Select.Option value="West Bengal">West Bengal</Select.Option>
-                      <Select.Option value="Delhi">Delhi</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={12}>
-                  <Form.Item label="PIN Code" name="postalCode"> {/* ALIGNED FIELD NAME */}
-                    <Input
-                      type="text"
-                      name="postalCode" // ALIGNED FIELD NAME
-                      value={formData.postalCode}
-                      onChange={handleInputChange}
-                      placeholder="Enter PIN code"
-                    />
-                  </Form.Item>
-                </Col>
-
-                <Col xs={24}>
-                  <Form.Item label="Landmark" name="landmark">
-                    <Input
-                      name="landmark"
-                      value={formData.landmark}
-                      onChange={handleInputChange}
-                      placeholder="Enter landmark"
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <div className="mt-4 flex justify-end space-x-3">
-                <Button onClick={resetForm}>
-                  Clear
-                </Button>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  icon={<SaveOutlined />}
-                  loading={isSaving}
-                >
-                  {isSaving ? 'Saving...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
-                </Button>
-              </div>
-            </Form>
-          </Card>
-        )}
-
-        {/* Search Bar */}
-        <div className="mb-6">
-          <Input.Search
-            placeholder="Search customers..."
-            allowClear
-            enterButton={<SearchOutlined />}
-            size="large"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ maxWidth: '400px' }}
-          />
-        </div>
-
-        {/* Customer List */}
-        <div className="mb-4 flex justify-between items-center">
-          <div>
-            {isLoading ? (
-              <Spin size="small" tip="Loading customers..." />
-            ) : (
-              <span>Showing {filteredCustomers.length} of {customers.length} customers</span>
-            )}
+          {/* Customer List */}
+          <div className="mb-4 flex justify-between items-center">
+            <div>
+              {isLoading ? (
+                <Spin size="small" tip="Loading customers..." />
+              ) : (
+                <span>Showing {filteredCustomers.length} of {customers.length} customers</span>
+              )}
+            </div>
           </div>
-          <Button 
-            icon={<SearchOutlined />} 
-            onClick={fetchCustomers}
-            loading={isLoading}
-            size="small"
-          >
-            Refresh List
-          </Button>
-        </div>
-        
-        {isLoading ? (
-          <Card className="text-center py-12">
-            <Spin size="large" tip="Loading customers..." />
-          </Card>
-        ) : (
-          <Card
-            className="customer-list-card"
-            title={`Customer List (${filteredCustomers.length})`}
-            bordered={false}
-          >
-            <Table
-              dataSource={filteredCustomers}
-              rowKey="id"
-              locale={{
-                emptyText: 'No customers found'
-              }}
-              pagination={{
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
-              }}
-              scroll={{ x: 'max-content' }}
-              columns={[
-                {
-                  title: 'SL NO',
-                  key: 'slNo',
-                  render: (text, record, index) => index + 1,
-                  width: 80,
-                },
-                {
-                  title: 'CUSTOMER NAME',
-                  dataIndex: 'name', // ALIGNED FIELD NAME
-                  key: 'name',
-                  width: 200,
-                  render: (text) => (
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center bg-gray-100 rounded-full">
-                        <UserOutlined className="text-gray-500" style={{ fontSize: '20px' }} />
+          
+          {isLoading ? (
+            <Card className="text-center py-12">
+              <Spin size="large" tip="Loading customers..." />
+            </Card>
+          ) : (
+            <Card
+              className="customer-list-card"
+              title={`Customer List (${filteredCustomers.length})`}
+              bordered={false}
+            >
+              <Table
+in                dataSource={filteredCustomers}
+                rowKey="id"
+                locale={{
+                  emptyText: 'No customers found'
+                }}
+                pagination={tableParams.pagination}
+                onChange={(pagination) => setTableParams({ pagination: { ...tableParams.pagination, ...pagination } })}
+                scroll={{ x: 'max-content' }}
+                columns={[
+                  {
+                    title: 'SL NO',
+                    key: 'slNo',
+                    render: (text, record, index) => (tableParams.pagination.current - 1) * tableParams.pagination.pageSize + index + 1,
+                    width: 80,
+                  },
+                  {
+                    title: 'CUSTOMER NAME',
+                    dataIndex: 'name', // ALIGNED FIELD NAME
+                    key: 'name',
+                    width: 200,
+                    render: (text) => (
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center bg-gray-100 rounded-full">
+                          <UserOutlined className="text-gray-500" style={{ fontSize: '20px' }} />
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{text}</div>
+                        </div>
                       </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{text}</div>
-                      </div>
+                    ),
+                  },
+                  {
+                    title: 'HOUSE NO./ FLAT NO./ STREET NO.',
+                    dataIndex: 'address', // ALIGNED FIELD NAME
+                    key: 'address',
+                    width: 220,
+                  },
+                  {
+                    title: 'CITY/TOWN/VILLAGE',
+                    dataIndex: 'city',
+                    key: 'city',
+                    width: 150,
+                  },
+                  {
+                    title: 'P.O/DISTRICT',
+                    dataIndex: 'district',
+                    key: 'district',
+                    width: 130,
+                  },
+                  {
+                    title: 'STATE',
+                    dataIndex: 'state',
+                    key: 'state',
+                    width: 130,
+                    render: (text) => standardizeState(text),
+                  },
+                  {
+                    title: 'PIN CODE',
+                    dataIndex: 'postalCode', // ALIGNED FIELD NAME
+                    key: 'postalCode',
+                    width: 100,
+                  },
+                  {
+                    title: 'LANDMARK',
+                    dataIndex: 'landmark',
+                    key: 'landmark',
+                    width: 150,
+                  },
+                  {
+                    title: 'MOBILE NO.',
+                    dataIndex: 'phone', // ALIGNED FIELD NAME
+                    key: 'phone',
+                    width: 130,
+                  },
+                  {
+                    title: 'MOBILE NO. 2',
+                    dataIndex: 'mobileNumber2',
+                    key: 'mobileNumber2',
+                    width: 130,
+                  },
+                  {
+                    title: 'SOURCE',
+                    dataIndex: 'source',
+                    key: 'source',
+                    width: 120,
+                    render: (text) => text ? <Tag color="blue">{text}</Tag> : '-',
+                  },
+                  {
+                    title: 'Actions',
+                    key: 'actions',
+                    fixed: 'right',
+                    width: 120,
+                    render: (text, record) => (
+                      <Space>
+                        <Tooltip title="Edit customer">
+                          <Button
+                            type="text"
+                            icon={<EditOutlined />}
+                            onClick={() => handleEdit(record)}
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                          />
+                        </Tooltip>
+                        <Tooltip title="Delete customer">
+                          <Button
+                            type="text"
+                            icon={<DeleteOutlined />}
+                            onClick={() => handleDelete(record.id)}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                          />
+                        </Tooltip>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            </Card>
+          )}
+
+          {/* Import Modal */}
+          <Modal
+            title="Import Customers from Excel"
+            open={showImportModal}
+            onCancel={() => {
+              setShowImportModal(false);
+              setSelectedFile(null);
+            }}
+            footer={null}
+            width={600}
+          >
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-1">
+                Upload an Excel file to import customers.
+              </p>
+              <Alert
+                message="Please use the template to ensure correct formatting."
+                description="The first row of your file must contain the exact headers provided in the template file."
+                type="info"
+                showIcon
+                className="mb-4"
+              />
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select File
+                </label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
+                  <div className="space-y-1 text-center">
+                    <InboxOutlined style={{ fontSize: '48px' }} className="mx-auto text-gray-400" />
+                    <div className="flex text-sm text-gray-600">
+                      <label
+                        htmlFor="excelFileInput"
+                        className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
+                      >
+                        <span>Upload a file</span>
+                        <input 
+                          id="excelFileInput" 
+                          name="excelFileInput" 
+                          type="file" 
+                          className="sr-only" 
+                          onChange={handleFileUpload} 
+                          accept=".xlsx, .xls" 
+                        />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
                     </div>
-                  ),
-                },
-                {
-                  title: 'HOUSE NO./ FLAT NO./ STREET NO.',
-                  dataIndex: 'address', // ALIGNED FIELD NAME
-                  key: 'address',
-                  width: 220,
-                },
-                {
-                  title: 'CITY/TOWN/VILLAGE',
-                  dataIndex: 'city',
-                  key: 'city',
-                  width: 150,
-                },
-                {
-                  title: 'P.O/DISTRICT',
-                  dataIndex: 'district',
-                  key: 'district',
-                  width: 130,
-                },
-                {
-                  title: 'STATE',
-                  dataIndex: 'state',
-                  key: 'state',
-                  width: 130,
-                  render: (text) => standardizeState(text),
-                },
-                {
-                  title: 'PIN CODE',
-                  dataIndex: 'postalCode', // ALIGNED FIELD NAME
-                  key: 'postalCode',
-                  width: 100,
-                },
-                {
-                  title: 'LANDMARK',
-                  dataIndex: 'landmark',
-                  key: 'landmark',
-                  width: 150,
-                },
-                {
-                  title: 'MOBILE NO.',
-                  dataIndex: 'phone', // ALIGNED FIELD NAME
-                  key: 'phone',
-                  width: 130,
-                },
-                {
-                  title: 'MOBILE NO. 2',
-                  dataIndex: 'mobileNumber2',
-                  key: 'mobileNumber2',
-                  width: 130,
-                },
-                {
-                  title: 'SOURCE',
-                  dataIndex: 'source',
-                  key: 'source',
-                  width: 120,
-                  render: (text) => text ? <Tag color="blue">{text}</Tag> : '-',
-                },
-                {
-                  title: 'Actions',
-                  key: 'actions',
-                  fixed: 'right',
-                  width: 120,
-                  render: (text, record) => (
-                    <Space>
-                      <Tooltip title="Edit customer">
-                        <Button
-                          type="text"
-                          icon={<EditOutlined />}
-                          onClick={() => handleEdit(record)}
-                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                        />
-                      </Tooltip>
-                      <Tooltip title="Delete customer">
-                        <Button
-                          type="text"
-                          icon={<DeleteOutlined />}
-                          onClick={() => handleDelete(record.id)}
-                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                        />
-                      </Tooltip>
-                    </Space>
-                  ),
-                },
-              ]}
-            />
-          </Card>
-        )}
-
-        {/* Import Modal */}
-        <Modal
-          title="Import Customers from Excel"
-          open={showImportModal}
-          onCancel={() => {
-            setShowImportModal(false);
-            setSelectedFile(null);
-          }}
-          footer={null}
-          width={600}
-        >
-          <div className="mb-4">
-            <p className="text-sm text-gray-600 mb-1">
-              Upload an Excel file to import customers.
-            </p>
-            <Alert
-              message="Please use the template to ensure correct formatting."
-              description="The first row of your file must contain the exact headers provided in the template file."
-              type="info"
-              showIcon
-              className="mb-4"
-            />
-
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Select File
-              </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
-                <div className="space-y-1 text-center">
-                  <InboxOutlined style={{ fontSize: '48px' }} className="mx-auto text-gray-400" />
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="excelFileInput"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                    >
-                      <span>Upload a file</span>
-                      <input 
-                        id="excelFileInput" 
-                        name="excelFileInput" 
-                        type="file" 
-                        className="sr-only" 
-                        onChange={handleFileUpload} 
-                        accept=".xlsx, .xls" 
-                      />
-                    </label>
-                    <p className="pl-1">or drag and drop</p>
+                    <p className="text-xs text-gray-500">XLS, XLSX up to 10MB</p>
+                    {selectedFile && (
+                      <p className="text-sm text-green-600 mt-2 font-medium">
+                        ✓ Selected: {selectedFile.name}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500">XLS, XLSX up to 10MB</p>
-                  {selectedFile && (
-                    <p className="text-sm text-green-600 mt-2 font-medium">
-                      ✓ Selected: {selectedFile.name}
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-6 flex justify-end space-x-2">
-            <Button
-              onClick={() => {
-                setShowImportModal(false);
-                setSelectedFile(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="primary"
-              onClick={handleImportCustomers}
-              disabled={!selectedFile || isImporting}
-              icon={<ImportOutlined />}
-              loading={isImporting}
-            >
-              {isImporting ? 'Importing...' : 'Import Customers'}
-            </Button>
-          </div>
-        </Modal>
+            <div className="mt-6 flex justify-end space-x-2">
+              <Button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setSelectedFile(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="primary"
+                onClick={handleImportCustomers}
+                disabled={!selectedFile || isImporting}
+                icon={<ImportOutlined />}
+                loading={isImporting}
+              >
+                {isImporting ? 'Importing...' : 'Import Customers'}
+              </Button>
+            </div>
+          </Modal>
+
+          {/* Update Modal */}
+          <Modal
+            title="Update Customers from Excel"
+            open={showUpdateModal}
+            onCancel={() => {
+              setShowUpdateModal(false);
+              setSelectedFile(null);
+            }}
+            footer={null}
+            width={600}
+          >
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-1">
+                Upload an Excel file to update existing customers.
+              </p>
+              <Alert
+                message="Please use the template to ensure correct formatting."
+                description="The first row of your file must contain the exact headers provided in the template file. Customers will be matched by 'MOBILE NO.'."
+                type="info"
+                showIcon
+                className="mb-4"
+              />
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select File
+                </label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors">
+                  <div className="space-y-1 text-center">
+                    <InboxOutlined style={{ fontSize: '48px' }} className="mx-auto text-gray-400" />
+                    <div className="flex text-sm text-gray-600">
+                      <label
+                        htmlFor="excelUpdateFileInput"
+                        className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
+                      >
+                        <span>Upload a file</span>
+                        <input 
+                          id="excelUpdateFileInput" 
+                          name="excelUpdateFileInput" 
+                          type="file" 
+                          className="sr-only" 
+                          onChange={handleFileUpload} 
+                          accept=".xlsx, .xls" 
+                        />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-gray-500">XLS, XLSX up to 10MB</p>
+                    {selectedFile && (
+                      <p className="text-sm text-green-600 mt-2 font-medium">
+                        ✓ Selected: {selectedFile.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-2">
+              <Button
+                onClick={() => {
+                  setShowUpdateModal(false);
+                  setSelectedFile(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="primary"
+                onClick={handleUpdateCustomers}
+                disabled={!selectedFile || isImporting}
+                icon={<UserSwitchOutlined />}
+                loading={isImporting}
+                style={{ backgroundColor: '#faad14', color: 'white', borderColor: '#faad14' }}
+              >
+                {isImporting ? 'Updating...' : 'Update Customers'}
+              </Button>
+            </div>
+          </Modal>
+        </div>
       </div>
     </div>
   );

@@ -13,33 +13,14 @@ export default defineConfig({
   server: {
     host: '0.0.0.0', // This allows access from any IP address
     port: 5173,
-    strictPort: true,
+    strictPort: false,
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        secure: false,
-      },
-      "/auth": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        secure: false,
-      },
-      "/inventory": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        secure: false,
-      },
-      "/customers": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        secure: false,
-      },
-      "/health": {
-        target: "http://localhost:3000",
+        target: "http://127.0.0.1:8080",
         changeOrigin: true,
         secure: false,
       },
     },
+    historyApiFallback: true,
   },
 });

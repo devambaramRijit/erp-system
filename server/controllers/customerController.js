@@ -1,5 +1,3 @@
-
-
 const db = require('../models');
 const fs = require('fs');
 const xlsx = require('xlsx');
@@ -33,39 +31,42 @@ exports.getCustomerById = async (req, res) => {
 // Create new customer
 exports.createCustomer = async (req, res) => {
   try {
-    const { name, email, phone, address, city, state, country, postalCode, company, taxId, notes } = req.body;
+    const { customerName, name, email, mobileNumber1, phone, houseNumber, address, city, state, country, pinCode, postalCode, district, company, taxId, notes, landmark } = req.body;
 
     // Validate required fields
-    if (!name) {
+    if (!customerName && !name) {
       return res.status(400).json({ message: 'Name is required' });
     }
 
     // Create new customer in database
     const newCustomer = await db.Customer.create({
-      name,
+      name: customerName || name,
       email,
-      phone,
-      address,
+      phone: mobileNumber1 || phone,
+      address: houseNumber || address,
       city,
       state,
       country,
-      postalCode,
+      postalCode: pinCode || postalCode,
+      district,
       company,
       taxId,
-      notes
+      notes,
+      landmark
     });
 
     res.status(201).json(newCustomer);
   } catch (error) {
     console.error('Error creating customer:', error);
-    res.status(500).json({ error: 'Failed to create customer' });
+    res.status(500).json({ message: 'Error creating customer', error: error.message });
   }
 };
 
 // Update customer
 exports.updateCustomer = async (req, res) => {
   try {
-    const { name, email, phone, address, city, state, country, postalCode, company, taxId, notes } = req.body;
+    console.log('Update customer request body:', req.body);
+    const { customerName, name, email, mobileNumber1, phone, houseNumber, address, city, state, country, pinCode, postalCode, district, company, taxId, notes, landmark } = req.body;
 
     // Find the customer in the database
     const customer = await db.Customer.findByPk(req.params.id);
@@ -74,29 +75,31 @@ exports.updateCustomer = async (req, res) => {
       return res.status(404).json({ message: 'Customer not found' });
     }
 
-    if (!name) {
+    if (!customerName && !name) {
       return res.status(400).json({ message: 'Name is required' });
     }
 
     // Update the customer
     await customer.update({
-      name,
+      name: customerName || name,
       email,
-      phone,
-      address,
+      phone: mobileNumber1 || phone,
+      address: houseNumber || address,
       city,
       state,
       country,
-      postalCode,
+      postalCode: pinCode || postalCode,
+      district,
       company,
       taxId,
-      notes
+      notes,
+      landmark
     });
 
     res.json(customer);
   } catch (error) {
     console.error('Error updating customer:', error);
-    res.status(500).json({ error: 'Failed to update customer' });
+    res.status(500).json({ message: 'Error updating customer', error: error.message });
   }
 };
 
@@ -118,20 +121,73 @@ exports.deleteCustomer = async (req, res) => {
   }
 };
 
+// Bulk update customers
+exports.bulkUpdateCustomers = async (req, res) => {
+  const customersToUpdate = req.body;
+  if (!Array.isArray(customersToUpdate) || customersToUpdate.length === 0) {
+    return res.status(400).json({ message: 'Invalid input data' });
+  }
+
+  let updatedCount = 0;
+  const notFound = [];
+  const errors = [];
+
+  for (const customerData of customersToUpdate) {
+    try {
+      if (!customerData.phone) {
+        notFound.push(customerData);
+        continue;
+      }
+
+      const customer = await db.Customer.findOne({ where: { phone: customerData.phone } });
+
+      if (customer) {
+        await customer.update({
+          name: customerData.name || customer.name,
+          address: customerData.address || customer.address,
+          city: customerData.city || customer.city,
+          district: customerData.district || customer.district,
+          state: customerData.state || customer.state,
+          postalCode: customerData.postalCode || customer.postalCode,
+          landmark: customerData.landmark || customer.landmark,
+          mobileNumber2: customerData.mobileNumber2 || customer.mobileNumber2,
+          source: customerData.source || customer.source,
+        });
+        updatedCount++;
+      } else {
+        notFound.push(customerData);
+      }
+    } catch (error) {
+      errors.push({ customerData, error: error.message });
+    }
+  }
+
+  res.status(200).json({
+    message: `Bulk update completed. Updated ${updatedCount} customers.`,
+    updatedCount,
+    notFound: notFound.length,
+    errors: errors.length,
+    notFoundCustomers: notFound,
+    errorDetails: errors,
+  });
+};
+
+
 // Column mappings for Excel import
 const columnMappings = {
-  customerName: ['customerName', 'name', 'customer name', 'CUSTOMER NAME'],
-  mobileNumber1: ['mobileNumber1', 'phone', 'phone number', 'mobile', 'MOBILE NO.'],
-  mobileNumber2: ['mobileNumber2', 'phone2', 'phone number 2', 'mobile2', 'MOBILE NO. 2'],
-  email: ['email', 'e-mail', 'EMAIL'],
-  addressLine1: ['addressLine1', 'address', 'street', 'HOUSE NO./ FLAT NO./ STREET NO.'],
-  city: ['city', 'town', 'CITY', 'CITY/TOWN/VILLAGE'],
-  state: ['state', 'province', 'STATE'],
-  country: ['country', 'nation', 'COUNTRY'],
-  postalCode: ['postalCode', 'postal code', 'zip', 'pincode', 'PIN CODE'],
-  district: ['district', 'P.O/DISTRICT'],
-  source: ['source', 'SOURCE'],
-  notes: ['notes', 'remarks', 'comments', 'LANDMARK']
+  customerName: ['customerName', 'name', 'customer name', 'CUSTOMER NAME', 'Name'],
+  mobileNumber1: ['mobileNumber1', 'phone', 'phone number', 'mobile', 'MOBILE NO.', 'Phone'],
+  mobileNumber2: ['mobileNumber2', 'phone2', 'phone number 2', 'mobile2', 'MOBILE NO. 2', 'Alternate Phone'],
+  email: ['email', 'e-mail', 'EMAIL', 'Email'],
+  houseNumber: ['houseNumber', 'address', 'street', 'HOUSE NO./ FLAT NO./ STREET NO.', 'addressLine1', 'House Number'],
+  city: ['city', 'town', 'CITY', 'CITY/TOWN/VILLAGE', 'City'],
+  district: ['district', 'P.O/DISTRICT', 'District'],
+  state: ['state', 'province', 'STATE', 'State'],
+  country: ['country', 'nation', 'COUNTRY', 'Country'],
+  postalCode: ['postalCode', 'postal code', 'zip', 'pincode', 'PIN CODE', 'pin code', 'PIN Code'],
+  source: ['source', 'SOURCE', 'Source'],
+  notes: ['notes', 'remarks', 'comments', 'Notes'],
+  landmark: ['landmark', 'LANDMARK', 'Landmark']
 };
 
 // Function to get the correct column name
@@ -149,12 +205,12 @@ const getColumnName = (header) => {
 const validateCustomerData = (customer) => {
   const errors = [];
   
-  // Check for customerName instead of Name
+  // Check for customerName
   if (!customer.customerName || customer.customerName.trim() === '') {
     errors.push('Customer name is required');
   }
   
-  // Check for mobileNumber1 instead of Phone
+  // Check for mobileNumber1
   if (!customer.mobileNumber1 || customer.mobileNumber1.trim() === '') {
     errors.push('Phone number is required');
   }
@@ -176,14 +232,19 @@ const processCustomerData = (row) => {
 
   // Map fields with case-insensitive matching
   const fieldMappings = {
-    customerName: ['customerName', 'name', 'customer name'],
-    mobileNumber1: ['mobileNumber1', 'phone', 'phone number', 'mobile'],
-    email: ['email', 'e-mail'],
-    addressLine1: ['addressLine1', 'address', 'street'],
-    city: ['city', 'town'],
-    state: ['state', 'province'],
-    country: ['country', 'nation'],
-    postalCode: ['postalCode', 'postal code', 'zip', 'pincode']
+    customerName: ['customerName', 'name', 'customer name', 'Name'],
+    mobileNumber1: ['mobileNumber1', 'phone', 'phone number', 'mobile', 'Phone', 'Mobile'],
+    mobileNumber2: ['mobileNumber2', 'phone2', 'phone number 2', 'mobile2', 'Alternate Phone', 'Alternate Phone'],
+    email: ['email', 'e-mail', 'Email'],
+    houseNumber: ['houseNumber', 'house number', 'address', 'street', 'addressLine1', 'House Number'],
+    city: ['city', 'town', 'City'],
+    district: ['district', 'P.O/DISTRICT', 'District'],
+    state: ['state', 'province', 'State'],
+    country: ['country', 'nation', 'Country'],
+    postalCode: ['postalCode', 'postal code', 'zip', 'pincode', 'pin code', 'PIN Code'],
+    source: ['source', 'Source'],
+    notes: ['notes', 'remarks', 'comments', 'Notes'],
+    landmark: ['landmark', 'Landmark']
   };
   
   // Process each field
@@ -200,14 +261,15 @@ const processCustomerData = (row) => {
   // Validate the processed data
   const validationErrors = validateCustomerData(customer);
   if (validationErrors.length > 0) {
-    console.log(`Skipping row: ${validationErrors.join(', ')}`);
+    console.log('Skipping row:');
     return null;
   }
 
   // Set default values for optional fields
-  customer.country = customer.country || 'USA';
+  customer.country = customer.country || 'India';
   customer.source = customer.source || 'Direct';
   customer.notes = customer.notes || '';
+  customer.landmark = customer.landmark || '';
 
   return customer;
 };
@@ -216,16 +278,6 @@ const processCustomerData = (row) => {
 // Bulk import customers from Excel - optimized for larger files
 exports.bulkImportCustomersFromExcel = async (req, res) => {
   try {
-    console.log('Bulk customer Excel import request received');
-
-    if (!req.file) {
-      console.log('No file uploaded');
-      return res.status(400).json({
-        message: 'No file uploaded',
-        success: false
-      });
-    }
-
     console.log(`File received: ${req.file.originalname}, size: ${req.file.size}, path: ${req.file.path}`);
 
     const importedCustomers = [];
@@ -245,7 +297,7 @@ exports.bulkImportCustomersFromExcel = async (req, res) => {
       worksheet = workbook.Sheets[sheetName];
 
       if (!worksheet) {
-        throw new Error(`Worksheet "${sheetName}" not found`);
+        throw new Error(`Worksheet not found`);
       }
 
       data = xlsx.utils.sheet_to_json(worksheet);
@@ -269,7 +321,7 @@ exports.bulkImportCustomersFromExcel = async (req, res) => {
       
       for (let index = batchStart; index < batchEnd; index++) {
         const row = data[index];
-        console.log(`Processing row ${index + 1}:`, JSON.stringify(row, null, 2));
+        console.log(`Processing row :`, JSON.stringify(row, null, 2));
 
         // Process the customer data using our function
         const customerData = processCustomerData(row);
@@ -285,17 +337,19 @@ exports.bulkImportCustomersFromExcel = async (req, res) => {
             name: customerData.customerName,
             email: customerData.email || '',
             phone: customerData.mobileNumber1,
-            address: customerData.addressLine1 || '',
+            address: customerData.houseNumber || '',
             city: customerData.city || '',
             state: customerData.state || '',
-            country: customerData.country || 'USA',
+            country: customerData.country || 'India',
             postalCode: customerData.postalCode || '',
-            notes: customerData.notes || ''
+            district: customerData.district || '',
+            notes: customerData.notes || '',
+            landmark: customerData.landmark || ''
           });
 
           importedCustomers.push(newCustomer);
         } catch (error) {
-          console.error(`Error creating customer for row ${index + 1}:`, error.message);
+          console.error(`Error creating customer for row :`, error.message);
           skippedRows.push(index + 1);
           // Continue with other items even if one fails
         }
@@ -356,7 +410,7 @@ exports.importCustomersFromExcel = async (req, res) => {
       worksheet = workbook.Sheets[sheetName];
 
       if (!worksheet) {
-        throw new Error(`Worksheet "${sheetName}" not found`);
+        throw new Error(`Worksheet not found`);
       }
 
       data = xlsx.utils.sheet_to_json(worksheet);
@@ -378,7 +432,7 @@ exports.importCustomersFromExcel = async (req, res) => {
     // Process the Excel data
     for (let index = 0; index < data.length; index++) {
       const row = data[index];
-      console.log(`Processing row ${index + 1}:`, JSON.stringify(row, null, 2));
+      console.log(`Processing row :`, JSON.stringify(row, null, 2));
 
       // Process the customer data using our new function
       const customerData = processCustomerData(row);
@@ -394,17 +448,19 @@ exports.importCustomersFromExcel = async (req, res) => {
           name: customerData.customerName,
           email: customerData.email || '',
           phone: customerData.mobileNumber1,
-          address: customerData.addressLine1 || '',
+          address: customerData.houseNumber || '',
           city: customerData.city || '',
           state: customerData.state || '',
-          country: customerData.country || 'USA',
+          country: customerData.country || 'India',
           postalCode: customerData.postalCode || '',
-          notes: customerData.notes || ''
+          district: customerData.district || '',
+          notes: customerData.notes || '',
+          landmark: customerData.landmark || ''
         });
 
         importedCustomers.push(newCustomer);
       } catch (error) {
-        console.error(`Error creating customer for row ${index + 1}:`, error.message);
+        console.error(`Error creating customer for row :`, error.message);
         skippedRows.push(index + 1);
         // Continue with other items even if one fails
       }

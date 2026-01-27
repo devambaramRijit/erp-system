@@ -4,8 +4,8 @@ import axios from "axios";
 // Function to handle invoice finalization and create activity log entry
 export const handleInvoiceFinalize = async (invoiceItems: any[], invoiceId: string, user = "Current User") => {
   try {
-    // Get current inventory items
-    const savedItems = localStorage.getItem('inventoryItemsWithProductType');
+    // Get current inventory items from the correct source
+    const savedItems = localStorage.getItem('erp_inventory');
     const inventoryItems = savedItems ? JSON.parse(savedItems) : [];
 
     // Get current activity logs
@@ -21,7 +21,13 @@ export const handleInvoiceFinalize = async (invoiceItems: any[], invoiceId: stri
       const itemIndex = updatedInventoryItems.findIndex(i => i.id === item.itemCode || i.id === item.id);
       if (itemIndex !== -1) {
         const currentItem = updatedInventoryItems[itemIndex];
-        const newQuantity = currentItem.quantity - item.quantity;
+        let newQuantity;
+
+        if (currentItem.productType === 'Manufactured') {
+          newQuantity = currentItem.quantity + item.quantity;
+        } else {
+          newQuantity = currentItem.quantity - item.quantity;
+        }
         
         // Update in database
         await axios.put(`/api/inventory/${currentItem.id}`, { ...currentItem, quantity: newQuantity });
@@ -31,8 +37,8 @@ export const handleInvoiceFinalize = async (invoiceItems: any[], invoiceId: stri
       }
     }
     
-    // Save updated inventory to localStorage
-    localStorage.setItem('inventoryItemsWithProductType', JSON.stringify(updatedInventoryItems));
+    // Save updated inventory to the correct source in localStorage
+    localStorage.setItem('erp_inventory', JSON.stringify(updatedInventoryItems));
     
     // Create a summary log entry for the finalized invoice
     const summaryLog: ActivityLog = {

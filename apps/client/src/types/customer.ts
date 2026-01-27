@@ -11,6 +11,7 @@ export interface CustomerData {
   pinCode?: string;
   source: string;
   notes?: string;
+  landmark?: string;
 }
 
 export interface FormData extends Omit<CustomerData, 'id'> {}

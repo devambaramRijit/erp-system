@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 
 // Login controller
 exports.login = async (req, res) => {
+  console.log('Login request body:', req.body);
   try {
     const { username, email, password } = req.body;
 
@@ -60,7 +61,7 @@ exports.login = async (req, res) => {
     // Fetch customer list from backend
     const customers = await db.Customer.findAll();
 
-    // Return user info, token, products, and customers
+    // Return user info and token
     res.json({
       message: 'Login successful',
       user: {
@@ -69,13 +70,11 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role
       },
-      token,
-      products,
-      customers
+      token
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error during login', error: error.message, stack: error.stack });
   }
 };
 
@@ -160,8 +159,12 @@ exports.logout = (req, res) => {
 
 // Get current user
 exports.getCurrentUser = async (req, res) => {
+  console.log('--- getCurrentUser ---');
   try {
-    if (req.session && req.session.user) {
+    const user = req.session?.user || req.user;
+    console.log('User from session or token:', user);
+
+    if (user) {
       // Fetch product list from backend
       const db = require('../models');
       const products = await db.Inventory.findAll();
@@ -169,12 +172,14 @@ exports.getCurrentUser = async (req, res) => {
       // Fetch customer list from backend
       const customers = await db.Customer.findAll();
 
+      console.log('Returning user data for:', user.username);
       res.json({ 
-        user: req.session.user,
+        user: user,
         products,
         customers
       });
     } else {
+      console.log('Not authenticated.');
       res.status(401).json({
         message: 'Not authenticated'
       });
@@ -202,5 +207,33 @@ exports.getAppData = async (req, res) => {
   } catch (error) {
     console.error('Error getting app data:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.refreshToken = async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(401).json({ message: 'Token is required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, 'your_jwt_secret', { ignoreExpiration: true });
+    const user = await User.findByPk(decoded.id);
+
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+
+    const newToken = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      'your_jwt_secret',
+      { expiresIn: '24h' }
+    );
+
+    res.json({ token: newToken });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(401).json({ message: 'Invalid token' });
   }
 };

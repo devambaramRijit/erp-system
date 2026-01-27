@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, Form, Input, Select, Table, InputNumber, Modal, message, Card, Row, Col, Divider, Space, Popconfirm, DatePicker } from 'antd';
+import { Button, Form, Input, Select, Table, InputNumber, Modal, message, Card, Row, Col, Divider, Space, Popconfirm, DatePicker, Typography, Slider } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, SaveOutlined } from '@ant-design/icons';
 import { useReactToPrint } from 'react-to-print';
 import { CustomerData } from './services/mockApi';
@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 
 const { Option } = Select;
 const { TextArea } = Input;
+const { Title } = Typography;
 
 interface Product {
   id: string;
@@ -397,35 +398,74 @@ const InvoiceGenerationScreen: React.FC = () => {
     message.success('Invoice deleted successfully');
   };
 
-  const handleSaveInvoice = () => {
-    form
-      .validateFields()
-      .then(values => {
-        if (currentInvoice) {
-          const updatedInvoice: Invoice = {
-            ...currentInvoice,
-            ...values,
-            id: editingInvoice ? editingInvoice.id : Date.now().toString(),
-          };
+  const updateLocalStorageProducts = (invoice: Invoice) => {
+    const savedProducts = localStorage.getItem('simpleInventoryProducts');
+    if (savedProducts) {
+      const products = JSON.parse(savedProducts);
+      const updatedProducts = [...products];
 
-          if (editingInvoice) {
-            const updatedInvoices = invoices.map(invoice => invoice.id === editingInvoice.id ? updatedInvoice : invoice);
-            setInvoices(updatedInvoices);
-            localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
-            message.success('Invoice updated successfully');
-          } else {
-            const newInvoices = [...invoices, updatedInvoice];
-            setInvoices(newInvoices);
-            localStorage.setItem('invoices', JSON.stringify(newInvoices));
-            message.success('Invoice added successfully');
-          }
-
-          setVisible(false);
+      invoice.items.forEach(item => {
+        const productIndex = updatedProducts.findIndex(p => p.id === item.productId);
+        if (productIndex !== -1) {
+          updatedProducts[productIndex].quantity -= item.quantity;
         }
-      })
-      .catch(info => {
-        console.log('Validate Failed:', info);
       });
+
+      localStorage.setItem('simpleInventoryProducts', JSON.stringify(updatedProducts));
+      window.dispatchEvent(new CustomEvent('productsUpdated'));
+    }
+  };
+
+  const handleSaveInvoice = async () => {
+    try {
+      const values = await form.validateFields();
+       
+      if (currentInvoice) {
+        const notesLine1 = values.notesLine1 || '';
+        const notesLine2 = values.notesLine2 || '';
+        const notesLine3 = values.notesLine3 || '';
+        const combinedNotes = `${notesLine1}\n${notesLine2}\n${notesLine3}`.trim();
+        
+        const invoiceData = {
+          ...currentInvoice,
+          ...values,
+          notes: combinedNotes,
+          notesLine1,
+          notesLine2,
+          notesLine3,
+        };
+        
+        if (editingInvoice) {
+          const updatedInvoice = { ...invoiceData, id: editingInvoice.id };
+          await api.put(`/invoices/${editingInvoice.id}`, updatedInvoice);
+          const updatedInvoices = invoices.map(inv => (inv.id === editingInvoice.id ? updatedInvoice : inv));
+          setInvoices(updatedInvoices);
+          localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+          updateLocalStorageProducts(updatedInvoice);
+          message.success('Invoice updated successfully');
+        } else {
+          // Assuming API returns the created invoice with an ID
+          const newInvoice = await api.post('/invoices', invoiceData);
+          const newInvoices = [...invoices, newInvoice];
+          setInvoices(newInvoices);
+          localStorage.setItem('invoices', JSON.stringify(newInvoices));
+          updateLocalStorageProducts(newInvoice);
+          message.success('Invoice added successfully');
+        }
+        
+        setVisible(false);
+        localStorage.removeItem('currentInvoice');
+      }
+    } catch (err) {
+      console.error('Save invoice failed:', err);
+      // Antd validation errors have `errorFields`
+      if (err.errorFields) {
+        message.error('Please fill out all required fields.');
+      } else {
+        // For API errors or others
+        message.error('Failed to save invoice. Please try again.');
+      }
+    }
   };
 
   const handleAddItem = () => {
@@ -758,22 +798,65 @@ const InvoiceGenerationScreen: React.FC = () => {
     }
   };
 
+  const [pincodeData, setPincodeData] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/pincodes.json')
+      .then((response) => response.json())
+      .then((data) => setPincodeData(data))
+      .catch((error) => console.error('Error loading pincode data:', error));
+  }, []);
+
+  const getPincodeDetails = (pincode: string) => {
+    if (!pincodeData || pincodeData.length === 0) {
+      return null;
+    }
+    return pincodeData.filter((item) => item.pincode === pincode);
+  };
+
+  const handlePincodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pincode = e.target.value;
+    if (pincode && pincode.length === 6) {
+      const details = getPincodeDetails(pincode);
+      if (details && details.length > 0) {
+        const location = details[0];
+        if (location) {
+          customerForm.setFieldsValue({
+            district: location.district,
+            state: location.stateName,
+          });
+        }
+      }
+    }
+  };
+
   const handleSaveNewCustomer = () => {
-    form.validateFields(['customerName', 'customerEmail', 'billingAddress']).then(values => {
+    customerForm.validateFields().then(values => {
       const newCustomer = {
         id: Date.now().toString(),
-        customerName: values.customerName,
-        mobileNumber1: values.customerEmail,
-        email: values.customerEmail,
-        billingAddress: values.billingAddress,
-        shippingAddress: values.billingAddress,
-        city: '',
-        state: '',
+        name: values.customerName,
+        phone: values.customerEmail,
+        address: values.billingAddress,
+        city: values.city,
+        district: values.district,
+        state: values.state,
+        postalCode: values.postalCode,
+        landmark: '',
+        mobileNumber2: '',
+        source: 'Invoice',
+        createdAt: new Date().toISOString(),
       };
 
-      setCustomers([...customers, newCustomer]);
+      const existingCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
+      const updatedCustomers = [...existingCustomers, newCustomer];
+      localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+      
+      window.dispatchEvent(new CustomEvent('customersUpdated'));
+
+      setCustomers(updatedCustomers);
       setSelectedCustomer(newCustomer);
       message.success('New customer saved successfully!');
+      setCustomerModalVisible(false);
     }).catch(error => {
       console.log('Validation error:', error);
       message.error('Please fill in all required customer fields');
@@ -785,49 +868,199 @@ const InvoiceGenerationScreen: React.FC = () => {
       title: 'Product Name',
       dataIndex: 'name',
       key: 'name',
+      width: 200,
+      fixed: 'left' as const,
+      render: (text: string) => (
+        <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          {text}
+        </div>
+      ),
     },
     {
       title: 'Product Type',
       dataIndex: 'productCategory',
       key: 'productCategory',
+      width: 150,
+      render: (category: string) => (
+        <span style={{ 
+          padding: '2px 8px', 
+          backgroundColor: '#f0f0f0', 
+          borderRadius: '4px',
+          fontSize: '12px'
+        }}>
+          {category}
+        </span>
+      ),
     },
     {
       title: 'Price Per Inch',
       dataIndex: 'pricePerInch',
       key: 'pricePerInch',
-      render: (price: number) => `₹${price ? price.toFixed(2) : '0.00'}`,
+      width: 180,
+      align: 'right' as const,
+      render: (price: number, record: InvoiceItem) => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <span>₹{price ? price.toFixed(2) : '0.00'}</span>
+          <Slider
+            min={0}
+            max={1000}
+            step={5}
+            value={price}
+            onChange={(value) => {
+              const updatedItem = { 
+                ...record, 
+                pricePerInch: value,
+                cpPerPc: value * (record.size || 0),
+                total: value * (record.size || 0) * record.quantity
+              };
+              const updatedItems = currentInvoice.items.map(item => 
+                item.id === record.id ? updatedItem : item
+              );
+              const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+              const total = subtotal - currentInvoice.discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+              setCurrentInvoice({
+                ...currentInvoice,
+                items: updatedItems,
+                subtotal,
+                total
+              });
+            }}
+            style={{ width: 120 }}
+            tooltipVisible={false}
+          />
+        </div>
+      ),
     },
     {
       title: 'Size',
       dataIndex: 'size',
       key: 'size',
+      width: 150,
+      align: 'center' as const,
+      render: (size: number, record: InvoiceItem) => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <span>{size}</span>
+          <Slider
+            min={0}
+            max={50}
+            step={0.5}
+            value={size}
+            onChange={(value) => {
+              const updatedItem = { 
+                ...record, 
+                size: value,
+                cpPerPc: (record.pricePerInch || 0) * value,
+                total: (record.pricePerInch || 0) * value * record.quantity
+              };
+              const updatedItems = currentInvoice.items.map(item => 
+                item.id === record.id ? updatedItem : item
+              );
+              const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+              const total = subtotal - currentInvoice.discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+              setCurrentInvoice({
+                ...currentInvoice,
+                items: updatedItems,
+                subtotal,
+                total
+              });
+            }}
+            style={{ width: 100 }}
+            tooltipVisible={false}
+          />
+        </div>
+      ),
     },
     {
       title: 'Quantity',
       dataIndex: 'quantity',
       key: 'quantity',
+      width: 150,
+      align: 'center' as const,
+      render: (quantity: number, record: InvoiceItem) => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <span>{quantity}</span>
+          <Slider
+            min={1}
+            max={100}
+            value={quantity}
+            onChange={(value) => {
+              const updatedItem = { ...record, quantity: value };
+              const updatedItems = currentInvoice.items.map(item => 
+                item.id === record.id ? updatedItem : item
+              );
+              const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+              const total = subtotal - currentInvoice.discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+              setCurrentInvoice({
+                ...currentInvoice,
+                items: updatedItems,
+                subtotal,
+                total
+              });
+            }}
+            style={{ width: 100 }}
+            tooltipVisible={false}
+          />
+        </div>
+      ),
     },
     {
       title: 'Rate',
       dataIndex: 'rate',
       key: 'rate',
-      render: (rate: number) => `₹${rate ? rate.toFixed(2) : '0.00'}`,
+      width: 180,
+      align: 'right' as const,
+      render: (rate: number, record: InvoiceItem) => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <span>₹{rate ? rate.toFixed(2) : '0.00'}</span>
+          <Slider
+            min={0}
+            max={10000}
+            step={10}
+            value={rate}
+            onChange={(value) => {
+              const updatedItem = { ...record, rate: value };
+              const updatedItems = currentInvoice.items.map(item => 
+                item.id === record.id ? updatedItem : item
+              );
+              const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0);
+              const total = subtotal - currentInvoice.discountAmount - (currentInvoice.advancePayment || 0) + currentInvoice.shippingCharges + currentInvoice.packingCharges;
+              setCurrentInvoice({
+                ...currentInvoice,
+                items: updatedItems,
+                subtotal,
+                total
+              });
+            }}
+            style={{ width: 120 }}
+            tooltipVisible={false}
+          />
+        </div>
+      ),
     },
     {
       title: 'Total',
       dataIndex: 'total',
       key: 'total',
-      render: (total: number) => `₹${total ? total.toFixed(2) : '0.00'}`,
+      width: 120,
+      align: 'right' as const,
+      render: (total: number) => (
+        <span style={{ fontWeight: 'bold' }}>
+          ₹{total ? total.toFixed(2) : '0.00'}
+        </span>
+      ),
     },
     {
       title: 'Actions',
       key: 'actions',
+      width: 150,
+      fixed: 'right' as const,
       render: (_: any, record: InvoiceItem) => (
-        <Space size="middle">
+        <Space size="small" wrap>
           <Button
             type="link"
             icon={<EditOutlined />}
             onClick={() => handleEditItem(record)}
+            style={{ padding: '4px 8px', height: 'auto', whiteSpace: 'normal' }}
           >
             Edit
           </Button>
@@ -841,6 +1074,7 @@ const InvoiceGenerationScreen: React.FC = () => {
               type="link"
               icon={<DeleteOutlined />}
               danger
+              style={{ padding: '4px 8px', height: 'auto', whiteSpace: 'normal' }}
             >
               Delete
             </Button>
@@ -855,32 +1089,56 @@ const InvoiceGenerationScreen: React.FC = () => {
       title: 'Invoice Number',
       dataIndex: 'invoiceNumber',
       key: 'invoiceNumber',
+      width: 180,
+      fixed: 'left' as const,
+      render: (text: string) => (
+        <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          {text}
+        </div>
+      ),
     },
     {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
+      width: 120,
+      render: (date: string) => new Date(date).toLocaleDateString(),
     },
     {
       title: 'Customer Name',
       dataIndex: 'customerName',
       key: 'customerName',
+      width: 200,
+      render: (text: string) => (
+        <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          {text}
+        </div>
+      ),
     },
     {
       title: 'Total',
       dataIndex: 'total',
       key: 'total',
-      render: (total: number) => `₹${total ? total.toFixed(2) : '0.00'}`,
+      width: 120,
+      align: 'right' as const,
+      render: (total: number) => (
+        <span style={{ fontWeight: 'bold', color: total > 0 ? '#52c41a' : '#8c8c8c' }}>
+          ₹{total ? total.toFixed(2) : '0.00'}
+        </span>
+      ),
     },
     {
       title: 'Actions',
       key: 'actions',
+      width: 150,
+      fixed: 'right' as const,
       render: (_: any, record: Invoice) => (
-        <Space size="middle">
+        <Space size="small" wrap>
           <Button
             type="link"
             icon={<EditOutlined />}
             onClick={() => handleEditInvoice(record)}
+            style={{ padding: '4px 8px', height: 'auto', whiteSpace: 'normal' }}
           >
             Edit
           </Button>
@@ -894,6 +1152,7 @@ const InvoiceGenerationScreen: React.FC = () => {
               type="link"
               icon={<DeleteOutlined />}
               danger
+              style={{ padding: '4px 8px', height: 'auto', whiteSpace: 'normal' }}
             >
               Delete
             </Button>
@@ -911,21 +1170,39 @@ const InvoiceGenerationScreen: React.FC = () => {
   }, [currentInvoice, form]);
 
   return (
-    <div className="container mx-auto px-4 py-6">
-      <Card>
-        <div className="flex justify-between items-center mb-6">
-          <h2>Invoice Generation</h2>
-          <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAddInvoice}>
-              Add Invoice
-            </Button>
-          </Space>
+    <div style={{ padding: '24px' }}>
+      <Card
+        title={<Title level={4}>Invoice Management</Title>}
+        bordered={false}
+        style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+        extra={
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddInvoice}>
+            Create Invoice
+          </Button>
+        }
+      >
+        <div style={{ overflowX: "auto" }}>
+          <Table 
+            dataSource={invoices} 
+            columns={invoiceColumns} 
+            rowKey="id"
+            pagination={{
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+              pageSize: 10,
+              pageSizeOptions: ["5", "10", "20", "50"]
+            }}
+            scroll={{ x: "max-content" }}
+            bordered
+            size="middle"
+            style={{ marginTop: 16, minWidth: "100%" }}
+          />
         </div>
-        <Table dataSource={invoices} columns={invoiceColumns} rowKey="id" />
       </Card>
 
       <Modal
-        title={editingInvoice ? 'Edit Invoice' : 'Add Invoice'}
+        title={<Title level={5}>{editingInvoice ? 'Edit Invoice' : 'Create Invoice'}</Title>}
         open={visible}
         afterOpenChange={(open) => console.log('Modal open state changed to:', open)}
         onOk={handleSaveInvoice}
@@ -940,7 +1217,23 @@ const InvoiceGenerationScreen: React.FC = () => {
           </Button>,
         ]}
       >
-        <Form form={form} layout="vertical">
+        <Form 
+          form={form} 
+          layout="vertical"
+          validateMessages={{
+            required: '${label} is required!',
+            types: {
+              email: '${label} is not a valid email!',
+              number: '${label} is not a valid number!',
+            },
+            number: {
+              min: '${label} must be at least ${min}!',
+            },
+          }}
+        >
+          <Divider orientation="left">
+            <Title level={5}>Invoice Details</Title>
+          </Divider>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
@@ -1008,6 +1301,9 @@ const InvoiceGenerationScreen: React.FC = () => {
             </Col>
           </Row>
 
+          <Divider orientation="left">
+            <Title level={5}>Customer Details</Title>
+          </Divider>
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
@@ -1038,40 +1334,54 @@ const InvoiceGenerationScreen: React.FC = () => {
           <Row>
             <Col span={24} style={{ textAlign: 'right', marginBottom: '20px' }}>
               <Button type="primary" onClick={() => setCustomerModalVisible(true)} icon={<PlusOutlined />}>
-                Add Customer
+                Add New Customer
               </Button>
             </Col>
           </Row>
 
           <Divider />
 
-          <div className="invoice-items-header">
-            <div className="flex justify-between items-center mb-4">
-              <h3>Invoice Items</h3>
-              <Button type="primary" onClick={handleAddItem} icon={<PlusOutlined />}>
-                Add Item
-              </Button>
-            </div>
+          <Divider orientation="left">
+            <Title level={5}>Invoice Items</Title>
+          </Divider>
+          <div style={{ marginBottom: 16 }}>
+            <Button type="primary" onClick={handleAddItem} icon={<PlusOutlined />}>
+              Add Item
+            </Button>
           </div>
 
           {currentInvoice && (
-            <Table
-              dataSource={currentInvoice.items}
-              columns={getManufacturedColumns()}
-              rowKey="id"
-              pagination={false}
-            />
+            <div style={{ overflowX: "auto" }}>
+              <Table
+                dataSource={currentInvoice.items}
+                columns={getManufacturedColumns()}
+                rowKey="id"
+                pagination={false}
+                locale={{
+                  emptyText: 'No items added yet. Click "Add Item" to start building your invoice.'
+                }}
+                scroll={{ x: "max-content" }}
+                bordered
+                size="middle"
+                style={{ marginTop: 16, minWidth: "100%" }}
+              />
+            </div>
           )}
 
-          <div className="invoice-totals mt-6">
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="notes" label="Notes">
+          <Divider orientation="left">
+            <Title level={5}>Invoice Summary</Title>
+          </Divider>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Card title={<Title level={5}>Notes</Title>} size="small">
+                <Form.Item name="notes" style={{ marginBottom: 0 }}>
                   <TextArea rows={4} placeholder="Additional notes..." />
                 </Form.Item>
-              </Col>
-              <Col span={12}>
-                <div className="space-y-2">
+              </Card>
+            </Col>
+            <Col span={12}>
+              <Card title={<Title level={5}>Payment Details</Title>} size="small">
+                <div style={{ padding: '8px 0' }}>
                   <Row justify="space-between">
                     <Col>Subtotal:</Col>
                     <Col>₹{currentInvoice?.subtotal ? currentInvoice.subtotal.toFixed(2) : '0.00'}</Col>
@@ -1149,18 +1459,18 @@ const InvoiceGenerationScreen: React.FC = () => {
                     </>
                   )}
                 </div>
-              </Col>
-            </Row>
-          </div>
+              </Card>
+            </Col>
+          </Row>
         </Form>
       </Modal>
 
       <Modal
-        title="Add New Customer"
+        title={<Title level={5}>Add New Customer</Title>}
         open={customerModalVisible}
         onOk={handleSaveNewCustomer}
         onCancel={() => setCustomerModalVisible(false)}
-        width={600}
+        width={800}
       >
         <Form form={customerForm} layout="vertical">
           <Row gutter={16}>
@@ -1194,11 +1504,47 @@ const InvoiceGenerationScreen: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="city"
+                label="City"
+              >
+                <Input placeholder="Enter city" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="postalCode"
+                label="PIN Code"
+              >
+                <Input placeholder="Enter PIN code" onChange={handlePincodeChange} maxLength={6} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="district"
+                label="District"
+              >
+                <Input placeholder="Enter district" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="state"
+                label="State"
+              >
+                <Input placeholder="Enter state" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
 
       <Modal
-        title="Add Item"
+        title={<Title level={5}>{itemForm.getFieldValue('editingItemId') ? 'Edit Item' : 'Add New Item'}</Title>}
         open={itemVisible}
         onOk={itemForm.getFieldValue('editingItemId') ? handleUpdateItem : handleSaveItem}
         onCancel={() => setItemVisible(false)}
@@ -1208,6 +1554,7 @@ const InvoiceGenerationScreen: React.FC = () => {
           <Form.Item name="editingItemId" hidden>
             <Input />
           </Form.Item>
+          <Divider orientation="left">Product Information</Divider>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
@@ -1264,6 +1611,7 @@ const InvoiceGenerationScreen: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
+          <Divider orientation="left">Pricing Details</Divider>
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item

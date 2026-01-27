@@ -1,0 +1,38 @@
+[
+  {
+    "id": "1",
+    "sku": "ITEM001",
+    "name": "Laptop Computer",
+    "description": "High-performance laptop for business use",
+    "quantity": 15,
+    "price": 999.99,
+    "category": "Electronics"
+  },
+  {
+    "id": "2",
+    "sku": "ITEM002",
+    "name": "Office Chair",
+    "description": "Ergonomic office chair with lumbar support",
+    "quantity": 32,
+    "price": 249.99,
+    "category": "Furniture"
+  },
+  {
+    "id": "3",
+    "sku": "ITEM003",
+    "name": "Wireless Mouse",
+    "description": "Bluetooth wireless mouse with precision tracking",
+    "quantity": 75,
+    "price": 29.99,
+    "category": "Electronics"
+  },
+  {
+    "id": "4",
+    "sku": "ITEM004",
+    "name": "Desk Lamp",
+    "description": "LED desk lamp with adjustable brightness",
+    "quantity": 24,
+    "price": 49.99,
+    "category": "Office Supplies"
+  }
+]

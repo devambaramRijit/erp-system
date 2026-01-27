@@ -59,6 +59,7 @@ db.serialize(() => {
     total REAL DEFAULT 0,
     notes TEXT,
     status TEXT DEFAULT 'draft',
+    invoiceType TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
@@ -79,22 +80,51 @@ db.serialize(() => {
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Drop the users table if it exists to ensure a clean schema
+  db.run(`DROP TABLE IF EXISTS users`);
+
+  // Recreate the users table with the correct schema
+  db.run(`CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    name TEXT,
+    role TEXT DEFAULT 'user',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Seed the users table with default admin and user
+  db.run(`INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)`, ['admin@example.com', 'admin123', 'Admin User', 'admin']);
+  db.run(`INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)`, ['user@example.com', 'user123', 'Demo User', 'user']);
+
+  // Add invoiceType column to invoices table if it doesn't exist
+  db.run('ALTER TABLE invoices ADD COLUMN invoiceType TEXT', (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding invoiceType column to invoices table:', err);
+    }
+  });
 });
 
 // Auth routes
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
-  
-  // Check for default credentials
-  if ((email === 'admin@example.com' && password === 'admin123') || 
-      (email === 'admin' && password === 'admin123')) {
+
+  db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
+    if (err) {
+      console.error('Error fetching user:', err);
+      return res.status(500).json({ message: 'Error logging in' });
+    }
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
     res.json({
-      user: { email, name: 'Admin User' },
+      user: { email: user.email, name: user.name, role: user.role },
       token: 'dummy-token'
     });
-  } else {
-    res.status(401).json({ message: 'Invalid credentials' });
-  }
+  });
 });
 
 app.get('/api/auth/me', (req, res) => {
@@ -257,13 +287,13 @@ app.post('/api/customers', (req, res) => {
   const { name, address, city, district, state, postalCode, landmark, phone, mobileNumber2, email } = req.body;
   
   db.run(
-    `INSERT INTO customers (name, address, city, district, state, postalCode, landmark, phone, mobileNumber2, email) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [name, address, city, district, state, postalCode, landmark, phone, mobileNumber2, email],
+    `INSERT INTO customers (name, address, city, district, state, postalCode, landmark, phone, mobileNumber2, email, createdAt) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [name, address, city, district, state, postalCode, landmark, phone, mobileNumber2, email, new Date().toISOString()],
     function(err) {
       if (err) {
         console.error('Error creating customer:', err);
-        return res.status(500).json({ message: 'Error creating customer' });
+        return res.status(500).json({ message: 'Error creating customer', error: err.message });
       }
       
       // Return the created customer with its ID
@@ -327,6 +357,98 @@ app.delete('/api/customers/:id', (req, res) => {
   });
 });
 
+// POST bulk update customers
+app.post('/api/customers/bulk-update', (req, res) => {
+  const customersToUpdate = req.body;
+  if (!Array.isArray(customersToUpdate) || customersToUpdate.length === 0) {
+    return res.status(400).json({ message: 'Invalid input data' });
+  }
+
+  let updatedCount = 0;
+  const notFound = [];
+  const errors = [];
+  let completed = 0;
+
+  customersToUpdate.forEach(customerData => {
+    if (!customerData.phone) {
+      notFound.push(customerData);
+      completed++;
+      if (completed === customersToUpdate.length) {
+        sendResponse();
+      }
+      return;
+    }
+
+    db.get('SELECT * FROM customers WHERE phone = ?', [customerData.phone], (err, customer) => {
+      if (err) {
+        errors.push({ customerData, error: err.message });
+        completed++;
+        if (completed === customersToUpdate.length) {
+          sendResponse();
+        }
+        return;
+      }
+
+      if (customer) {
+        const updateSql = `UPDATE customers SET 
+          name = ?, 
+          address = ?, 
+          city = ?, 
+          district = ?, 
+          state = ?, 
+          postalCode = ?, 
+          landmark = ?, 
+          mobileNumber2 = ?, 
+          email = ?, 
+          updatedAt = ? 
+          WHERE id = ?`;
+        const params = [
+          customerData.name || customer.name,
+          customerData.address || customer.address,
+          customerData.city || customer.city,
+          customerData.district || customer.district,
+          customerData.state || customer.state,
+          customerData.postalCode || customer.postalCode,
+          customerData.landmark || customer.landmark,
+          customerData.mobileNumber2 || customer.mobileNumber2,
+          customerData.email || customer.email,
+          new Date().toISOString(),
+          customer.id
+        ];
+        db.run(updateSql, params, function(err) {
+          if (err) {
+            errors.push({ customerData, error: err.message });
+          } else {
+            updatedCount++;
+          }
+          completed++;
+          if (completed === customersToUpdate.length) {
+            sendResponse();
+          }
+        });
+      } else {
+        notFound.push(customerData);
+        completed++;
+        if (completed === customersToUpdate.length) {
+          sendResponse();
+        }
+      }
+    });
+  });
+
+  function sendResponse() {
+    res.status(200).json({
+      message: `Bulk update completed. Updated ${updatedCount} customers.`,
+      updatedCount,
+      notFound: notFound.length,
+      errors: errors.length,
+      notFoundCustomers: notFound,
+      errorDetails: errors,
+    });
+  }
+});
+
+
 // GET invoice by ID
 app.get('/api/invoices/:id', (req, res) => {
   db.get('SELECT * FROM invoices WHERE id = ?', [req.params.id], (err, row) => {
@@ -353,113 +475,258 @@ app.get('/api/invoices/:id', (req, res) => {
 });
 
 app.post('/api/invoices', (req, res) => {
-  const { invoiceNumber, date, customerName, customerEmail, customerAddress, billingAddress, items, subtotal, taxRate, taxAmount, total, notes, status } = req.body;
+  const { invoiceNumber, date, customerName, customerEmail, billingAddress, items, subtotal, taxRate, taxAmount, total, notes, status, invoiceType } = req.body;
 
   if (!invoiceNumber || !customerName) {
     return res.status(400).json({ message: 'Invoice number and customer name are required' });
   }
 
-  // Check if invoice number already exists
-  db.get('SELECT id FROM invoices WHERE invoiceNumber = ?', [invoiceNumber], (err, row) => {
-    if (err) {
-      console.error('Error checking invoice number:', err);
-      return res.status(500).json({ error: 'Failed to check invoice number' });
-    }
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
 
-    if (row) {
-      return res.status(400).json({ error: 'Invoice number already exists' });
-    }
-
-    const sql = `INSERT INTO invoices (invoiceNumber, date, customerName, customerEmail, customerAddress, items, subtotal, taxRate, taxAmount, total, notes, status, createdAt, updatedAt)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-    db.run(sql, [
-      invoiceNumber,
-      date || new Date().toISOString(),
-      customerName,
-      customerEmail || '',
-      billingAddress || customerAddress || '',
-      JSON.stringify(items || []),
-      subtotal || 0,
-      taxRate || 0,
-      taxAmount || 0,
-      total || 0,
-      notes || '',
-      status || 'draft',
-      new Date().toISOString(),
-      new Date().toISOString()
-    ], function(err) {
+    db.get('SELECT id FROM invoices WHERE invoiceNumber = ?', [invoiceNumber], (err, row) => {
       if (err) {
-        console.error('Error creating invoice:', err);
-        return res.status(500).json({ message: 'Error creating invoice' });
+        db.run('ROLLBACK');
+        return res.status(500).json({ error: 'Failed to check invoice number' });
       }
 
-      // Get the newly created invoice
-      db.get("SELECT * FROM invoices WHERE id = ?", [this.lastID], (err, row) => {
+      if (row) {
+        db.run('ROLLBACK');
+        return res.status(400).json({ error: 'Invoice number already exists' });
+      }
+
+      const sql = `INSERT INTO invoices (invoiceNumber, date, customerName, customerEmail, customerAddress, items, subtotal, taxRate, taxAmount, total, notes, status, createdAt, updatedAt, invoiceType)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+      const params = [
+        invoiceNumber,
+        date || new Date().toISOString(),
+        customerName,
+        customerEmail || '',
+        billingAddress || '',
+        JSON.stringify(items || []),
+        subtotal || 0,
+        taxRate || 0,
+        taxAmount || 0,
+        total || 0,
+        notes || '',
+        status || 'draft',
+        new Date().toISOString(),
+        new Date().toISOString(),
+        invoiceType || 'manufactured'
+      ];
+
+      db.run(sql, params, function(err) {
         if (err) {
-          console.error('Error fetching newly created invoice:', err);
+          console.error('Error creating invoice:', err);
+          db.run('ROLLBACK');
           return res.status(500).json({ message: 'Error creating invoice' });
         }
 
-        // Parse items JSON
-        if (row && row.items) {
-          try {
-            row.items = JSON.parse(row.items);
-          } catch (parseErr) {
-            console.error('Error parsing items JSON:', parseErr);
-            row.items = [];
-          }
-        }
+        const invoiceId = this.lastID;
 
-        res.status(201).json(row);
+        const itemPromises = (items || []).map(item => {
+          return new Promise((resolve, reject) => {
+            if (item.productId && item.quantity > 0) {
+              const updateSql = `UPDATE inventory SET quantity = quantity - ? WHERE id = ?`;
+              db.run(updateSql, [item.quantity, item.productId], (err) => {
+                if (err) return reject(err);
+                resolve();
+              });
+            } else {
+              resolve();
+            }
+          });
+        });
+
+        Promise.all(itemPromises)
+          .then(() => {
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ message: 'Failed to commit transaction' });
+              }
+              db.get("SELECT * FROM invoices WHERE id = ?", [invoiceId], (err, row) => {
+                if (err) {
+                  return res.status(500).json({ message: 'Error fetching newly created invoice' });
+                }
+                res.status(201).json(row);
+              });
+            });
+          })
+          .catch(err => {
+            console.error('Error updating inventory:', err);
+            db.run('ROLLBACK');
+            res.status(500).json({ message: 'Error updating inventory' });
+          });
       });
     });
   });
 });
 
 // PUT update invoice
+
 app.put('/api/invoices/:id', (req, res) => {
+
   const { id } = req.params;
-  const { items, ...otherFields } = req.body;
-  
-  // Convert items to JSON string if it's an array
-  const updateData = {
-    ...otherFields,
-    items: Array.isArray(items) ? JSON.stringify(items) : items
-  };
-  
-  const sql = `UPDATE invoices SET ${Object.keys(updateData).map(key => `${key} = ?`).join(', ')}, updatedAt = ? WHERE id = ?`;
-  const values = [...Object.values(updateData), new Date().toISOString(), id];
-  
-  db.run(sql, values, function(err) {
+
+  const { items: newItems, ...invoiceData } = req.body;
+
+
+
+  db.get('SELECT * FROM invoices WHERE id = ?', [id], (err, oldInvoice) => {
+
     if (err) {
-      console.error('Error updating invoice:', err);
-      return res.status(500).json({ message: 'Error updating invoice' });
+
+      return res.status(500).json({ message: 'Failed to fetch invoice for update' });
+
     }
-    
-    if (this.changes === 0) {
+
+    if (!oldInvoice) {
+
       return res.status(404).json({ message: 'Invoice not found' });
+
     }
+
+
+
+    const oldItems = JSON.parse(oldInvoice.items || '[]');
+
     
-    // Get the updated invoice
-    db.get('SELECT * FROM invoices WHERE id = ?', [id], (err, row) => {
-      if (err) {
-        console.error('Error fetching updated invoice:', err);
-        return res.status(500).json({ message: 'Error fetching updated invoice' });
+
+    const inventoryChanges = new Map();
+
+    oldItems.forEach(item => {
+
+      if (item.productId && item.quantity) {
+
+        inventoryChanges.set(item.productId, (inventoryChanges.get(item.productId) || 0) + item.quantity);
+
       }
-      
-      // Parse items JSON if needed
-      if (row && row.items) {
-        try {
-          row.items = JSON.parse(row.items);
-        } catch (e) {
-          row.items = [];
-        }
-      }
-      
-      res.json(row);
+
     });
+
+    newItems.forEach(item => {
+
+      if (item.productId && item.quantity) {
+
+        inventoryChanges.set(item.productId, (inventoryChanges.get(item.productId) || 0) - item.quantity);
+
+      }
+
+    });
+
+
+
+    db.serialize(() => {
+
+      db.run('BEGIN TRANSACTION');
+
+
+
+      const stmt = db.prepare('UPDATE inventory SET quantity = quantity + ? WHERE id = ?');
+
+      for (const [productId, quantityChange] of inventoryChanges.entries()) {
+
+        if (productId && quantityChange !== 0) {
+
+          stmt.run(quantityChange, productId);
+
+        }
+
+      }
+
+
+
+      stmt.finalize((err) => {
+
+        if (err) {
+
+          console.error('Inventory update failed:', err);
+
+          db.run('ROLLBACK');
+
+          return res.status(500).json({ message: 'Inventory update failed' });
+
+        }
+
+
+
+        const updateSql = `UPDATE invoices SET
+
+            invoiceNumber = ?, date = ?, customerName = ?, customerEmail = ?,
+
+            customerAddress = ?, items = ?, subtotal = ?, total = ?, notes = ?, status = ?,
+
+            invoiceType = ?, updatedAt = ?
+
+          WHERE id = ?`;
+
+        
+
+        const params = [
+
+          invoiceData.invoiceNumber, invoiceData.date, invoiceData.customerName,
+
+          invoiceData.customerEmail, invoiceData.billingAddress, JSON.stringify(newItems || []),
+
+          invoiceData.subtotal || 0, invoiceData.total || 0, invoiceData.notes,
+
+          invoiceData.status, invoiceData.invoiceType || 'manufactured', new Date().toISOString(), id
+
+        ];
+
+
+
+        db.run(updateSql, params, function(err) {
+
+          if (err) {
+
+            console.error('Invoice update failed:', err);
+            db.run('ROLLBACK');
+
+            return res.status(500).json({ message: 'Invoice update failed' });
+
+          }
+
+
+
+          db.run('COMMIT', (commitErr) => {
+
+            if (commitErr) {
+
+              db.run('ROLLBACK');
+
+              return res.status(500).json({ message: 'Failed to commit transaction' });
+
+            }
+
+
+
+            db.get('SELECT * FROM invoices WHERE id = ?', [id], (err, row) => {
+
+              if (err) {
+
+                return res.status(500).json({ message: 'Failed to fetch updated invoice' });
+
+              }
+
+              row.items = JSON.parse(row.items || '[]');
+
+              res.json(row);
+
+            });
+
+          });
+
+        });
+
+      });
+
+    });
+
   });
+
 });
 
 // DELETE invoice

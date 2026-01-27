@@ -13,9 +13,15 @@ import InvoiceNavigation from './InvoiceNavigation';
 import CustomerScreen from './CustomerScreen';
 
 function App() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedTab = localStorage.getItem('activeTab');
+    return savedTab ? savedTab : 'dashboard';
+  });
 
   useEffect(() => {
     // Check if user is authenticated and fetch app data
@@ -86,6 +92,10 @@ function App() {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
   // Listen for authentication events and refresh data when needed
   useEffect(() => {
     const handleAuthRefresh = () => {
@@ -101,6 +111,7 @@ function App() {
 
   const handleLogin = (userData: any, products?: any[], customers?: any[]) => {
     setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
 
     // Store products and customers data in localStorage for offline access
     if (products) {
@@ -120,6 +131,7 @@ function App() {
     try {
       await axios.post('/auth/logout', {}, { withCredentials: true });
       setUser(null);
+      localStorage.removeItem('user');
 
       // Clear products and customers data from localStorage
       localStorage.removeItem('simpleInventoryProducts');
@@ -132,6 +144,7 @@ function App() {
       console.error('Logout failed:', error);
       // Even if the API call fails, clear local user state
       setUser(null);
+      localStorage.removeItem('user');
 
       // Still clear localStorage data
       localStorage.removeItem('simpleInventoryProducts');

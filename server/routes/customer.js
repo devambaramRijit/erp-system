@@ -1,4 +1,3 @@
-
 const express = require('express');
 const router = express.Router();
 const customerController = require('../controllers/customerController');
@@ -34,5 +33,8 @@ router.post('/import', isAuthenticated, upload.single('file'), customerControlle
 
 // Bulk import customers from Excel
 router.post('/bulk-import', isAuthenticated, upload.single('file'), customerController.bulkImportCustomersFromExcel);
+
+// Bulk update customers
+router.post('/bulk-update', isAuthenticated, customerController.bulkUpdateCustomers);
 
 module.exports = router;

@@ -6,19 +6,19 @@
 :root {
   /* Light theme */
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #f8fafc;
   --card: #ffffff;
-  --card-foreground: #171717;
+  --card-foreground: #f8fafc;
   --popover: #ffffff;
-  --popover-foreground: #171717;
+  --popover-foreground: #f8fafc;
   --primary: #3b82f6;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
+  --secondary-foreground: #f8fafc;
   --muted: #f1f5f9;
-  --muted-foreground: #64748b;
+  --muted-foreground: #f8fafc;
   --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
+  --accent-foreground: #f8fafc;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --border: #e2e8f0;
@@ -70,6 +70,10 @@
     --border: var(--dark-border);
     --input: var(--dark-input);
     --ring: var(--dark-ring);
+  }
+
+  input, textarea {
+    color: var(--dark-foreground);
   }
 }
 
@@ -266,4 +270,19 @@ body {
 h1, h2, h3, h4, h5, h6 { color: var(--foreground); }
 .card p, .card span, .card div, .card label {
   color: var(--card-foreground);
+}
+input { color: black !important; }
+
+/* ---------- Custom Menu Styles ---------- */
+.ant-menu-item-selected,
+.glowing-menu-item {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.8), inset 0 0 5px rgba(59, 130, 246, 0.6);
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border-right: 3px solid var(--primary) !important;
+  color: white !important;
+}
+
+.ant-menu-dark .ant-menu-item-selected,
+.ant-menu-dark .glowing-menu-item {
+  color: white !important; /* Ensure text is white on dark theme */
 }

@@ -9,6 +9,7 @@ export interface InventoryItem {
   unit: string;
   cpPerPiece: number;
   ratePerInch: number;
+  costPricePerInch?: number;
   createdAt: string;
   updatedAt: string;
 }

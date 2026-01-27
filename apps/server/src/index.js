@@ -4,6 +4,7 @@ import cors from 'cors';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.routes';
+import invoiceRoutes from './routes/invoice.routes';
 
 console.log('Starting Express server...');
 
@@ -26,6 +27,7 @@ app.use(session({
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/invoices', invoiceRoutes);
 
 // Serve static files from the client build (if it exists)
 app.use(express.static(path.join(__dirname, '../../client/dist')));

@@ -18,7 +18,7 @@ export const validateRequest = (schema: ZodSchema) => {
       if (error instanceof z.ZodError) {
         res.status(400).json({
           message: 'Validation failed',
-          errors: error.errors.map(err => ({
+          errors: error.issues.map(err => ({
             field: err.path.join('.'),
             message: err.message
           }))
@@ -40,7 +40,7 @@ export const validateQuery = (schema: ZodSchema) => {
     try {
       if (req.query) {
         const validatedQuery = schema.parse(req.query);
-        req.query = validatedQuery;
+        req.query = validatedQuery as any;
       }
 
       next();
@@ -48,7 +48,7 @@ export const validateQuery = (schema: ZodSchema) => {
       if (error instanceof z.ZodError) {
         res.status(400).json({
           message: 'Query validation failed',
-          errors: error.errors.map(err => ({
+          errors: error.issues.map(err => ({
             field: err.path.join('.'),
             message: err.message
           }))

@@ -7,7 +7,6 @@ import {
   AppstoreOutlined
 } from '@ant-design/icons';
 import InvoiceScreen from './InvoiceScreen';
-import InvoiceGenerationScreen from './InvoiceGenerationScreenNew';
 
 const { Title, Text } = Typography;
 

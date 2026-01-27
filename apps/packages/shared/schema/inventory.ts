@@ -7,13 +7,13 @@ import { z } from "zod";
 export const inventoryIdSchema = z.string().uuid({ message: "Invalid inventory id" });
 
 export const skuSchema = z
-  .string({ required_error: "SKU is required" })
+  .string()
   .trim()
   .min(3, { message: "SKU must be at least 3 characters" })
   .max(64, { message: "SKU is too long" });
 
 export const nameSchema = z
-  .string({ required_error: "Name is required" })
+  .string()
   .trim()
   .min(1, { message: "Name cannot be empty" })
   .max(200, { message: "Name is too long" });
@@ -26,12 +26,12 @@ export const descriptionSchema = z
   .or(z.literal("").transform(() => undefined));
 
 export const quantitySchema = z
-  .number({ required_error: "Quantity is required" })
+  .number()
   .int({ message: "Quantity must be an integer" })
   .min(0, { message: "Quantity cannot be negative" });
 
 export const priceSchema = z
-  .number({ required_error: "Price is required" })
+  .number()
   .nonnegative({ message: "Price cannot be negative" })
   .refine((v) => Number.isFinite(v), { message: "Price must be a finite number" });
 

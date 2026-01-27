@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-import { checkServerHealth } from '../services/config';
 import './LoginForm.css'; // Import the CSS file
-
-// Set correct API URL
-axios.defaults.baseURL = 'http://localhost:3000/api';
+import { api } from '../lib/api'; // Import the api helper
 
 export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], customers?: any[]) => void }) {
   const [email, setEmail] = useState('');
@@ -16,58 +12,37 @@ export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], 
     e.preventDefault();
     setLoading(true);
     setError('');
-    
-    // Check if server is running
-    const serverIsRunning = await checkServerHealth();
-    if (!serverIsRunning) {
-      setError('Cannot connect to server. Please check if the server is running at http://localhost:3000');
-      setLoading(false);
-      return;
-    }
 
     try {
-      const res = await axios.post(
-        "/auth/login",
-        { email, password },
-        { withCredentials: true }
-      );
+      // Make a real API call to the backend
+      const response = await api.post('/auth/login', {
+        email, // The backend can handle email or username
+        password,
+      });
 
-      if (res.data.user) {
-        // Store token in localStorage
-        if (res.data.token) {
-          localStorage.setItem('token', res.data.token);
+      if (response && response.token && response.user) {
+        // Store token and user info in localStorage
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+        
+        // Also store the products and customers that are returned on login
+        // This ensures the rest of the app is populated with data
+        if (response.products) {
+          localStorage.setItem('erp_inventory', JSON.stringify(response.products));
         }
-        onLogin(res.data.user, res.data.products, res.data.customers);
-      } else if (res.data.message === 'Login successful' && res.data.token) {
-        // Handle case where user info might be nested differently
-        localStorage.setItem('token', res.data.token);
-        onLogin(res.data.user, res.data.products, res.data.customers);
+        if (response.customers) {
+          localStorage.setItem('customers', JSON.stringify(response.customers));
+        }
+        
+        // Call the onLogin callback to update the app state
+        onLogin(response.user, response.products, response.customers);
       } else {
-        setError('Login failed: No user data returned');
+        // This case should ideally not be reached if the backend is consistent
+        setError('Login failed: Invalid response from server.');
       }
     } catch (err: any) {
-      console.error('Login error:', err);
-
-      // Handle different error scenarios
-      if (err.response) {
-        // Server responded with error status
-        const status = err.response.status;
-        const message = err.response.data?.message || 'Login failed';
-
-        if (status === 401) {
-          setError('Invalid email or password');
-        } else if (status === 400) {
-          setError('Invalid input: ' + message);
-        } else {
-          setError(`Server error (${status}): ${message}`);
-        }
-      } else if (err.request) {
-        // Request was made but no response received
-        setError('No response from server. Please check if the server is running.');
-      } else {
-        // Something else happened
-        setError('An unexpected error occurred: ' + err.message);
-      }
+      // The api helper throws an error with a message on non-2xx responses
+      setError(err.message || 'An unknown error occurred.');
     } finally {
       setLoading(false);
     }
@@ -80,7 +55,7 @@ export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], 
       <div className="input-group">
         <input
           type="email"
-          placeholder="Email"
+          placeholder="Email or Username"
           value={email}
           onChange={e => setEmail(e.target.value)}
           required
@@ -113,9 +88,7 @@ export function LoginForm({ onLogin }: { onLogin: (user: any, products?: any[], 
       </button>
 
       <div className="demo-credentials">
-        <p>Demo credentials:</p>
-        <p>Admin: admin@example.com / admin123</p>
-        <p>User: user@example.com / user123</p>
+        <p>Please use your registered username/email and password.</p>
       </div>
     </form>
   );

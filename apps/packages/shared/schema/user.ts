@@ -4,26 +4,24 @@ import { z } from "zod";
  * Shared User schemas for validation and typing across client and server
  */
 
-export const userRoleSchema = z.enum(["ADMIN", "MANAGER", "STAFF", "VIEWER"], {
-  required_error: "Role is required",
-});
+export const userRoleSchema = z.enum(["ADMIN", "MANAGER", "STAFF", "VIEWER"]);
 
 export const userIdSchema = z.string().uuid({ message: "Invalid user id" });
 
 export const emailSchema = z
-  .string({ required_error: "Email is required" })
+  .string()
   .trim()
   .toLowerCase()
   .email({ message: "Invalid email address" });
 
 export const nameSchema = z
-  .string({ required_error: "Name is required" })
+  .string()
   .trim()
   .min(1, { message: "Name cannot be empty" })
   .max(120, { message: "Name is too long" });
 
 export const passwordSchema = z
-  .string({ required_error: "Password is required" })
+  .string()
   .min(8, { message: "Password must be at least 8 characters" })
   .max(128, { message: "Password is too long" });
 

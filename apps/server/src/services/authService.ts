@@ -58,12 +58,10 @@ export async function authenticateUser(email: string, password: string): Promise
       };
     }
 
-    // Return user data (excluding password)
-    const { password: _, ...userWithoutPassword } = user;
-
+    // Return user data
     return {
       success: true,
-      user: userWithoutPassword
+      user: user
     };
   } catch (error) {
     console.error('Authentication error:', error);
@@ -81,9 +79,8 @@ export async function getUserById(id: string): Promise<User | null> {
   const user = mockUsers.find(u => u.id === id);
   if (!user) return null;
 
-  // Return user data without password
-  const { password: _, ...userWithoutPassword } = user;
-  return userWithoutPassword;
+  // Return user data
+  return user;
 }
 
 /**
@@ -101,7 +98,6 @@ export async function createUser(userData: Omit<User, 'id' | 'createdAt' | 'upda
   mockUsers.push(newUser);
   mockPasswords[newUser.email] = userData.password;
 
-  // Return user without password
-  const { password: _, ...userWithoutPassword } = newUser;
-  return userWithoutPassword;
+  // Return user
+  return newUser;
 }

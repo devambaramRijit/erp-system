@@ -1,0 +1,45 @@
+--- a/apps/client/src/InvoiceScreen.tsx
++++ b/apps/client/src/InvoiceScreen.tsx
+@@ -1714,21 +1714,28 @@
+       render: (total: number, record: Invoice) => {
+-        // Calculate the correct total
+-        const itemsToProcess = Array.isArray(record.items) ? record.items : [];
++        // First, handle the case where items might be a string that needs parsing
++        let itemsToProcess = [];
++        if (typeof record.items === 'string') {
++          try {
++            itemsToProcess = JSON.parse(record.items);
++          } catch (e) {
++            console.error('Failed to parse items for invoice:', record.invoiceNumber, e);
++            itemsToProcess = [];
++          }
++        } else if (Array.isArray(record.items)) {
++          itemsToProcess = record.items;
++        }
++        
++        // Calculate the correct total from items
+         const subtotal = itemsToProcess.reduce((sum, item) => {
+-          if (item.productCategory === 'Laddu Gopal Base') {
+-            return sum + item.total;
+-          } else {
+-            return sum + ((item.rate || 0) * (item.quantity || 0));
+-          }
++          // Use item.total directly if it exists, otherwise calculate it
++          if (item.total !== undefined && item.total !== null) {
++            return sum + item.total;
++          } else {
++            return sum + ((item.rate || item.price || 0) * (item.quantity || 0));
++          }
+         }, 0);
+
+         const discountAmount = (record.discountType === 'percentage' || !record.discountType)
+           ? (subtotal * (record.discountRate || 0)) / 100
+           : (record.discountRate || 0);
+         const subtotalAfterDiscount = subtotal - discountAmount;
+-        const calculatedTotal = subtotalAfterDiscount + (record.shippingCharges || 0) + (record.packingCharges || 0);
+-        return `₹${calculatedTotal.toFixed(2)}`;
++        const calculatedTotal = subtotalAfterDiscount + (record.shippingCharges || 0) + (record.packingCharges || 0) - (record.advancePayment || 0);
++        
++        // Return the calculated total or the stored total if items are empty
++        return `₹${(itemsToProcess.length > 0 ? calculatedTotal : (total || 0)).toFixed(2)}`;
+       },

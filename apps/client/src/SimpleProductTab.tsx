@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
-import axios from 'axios';
-
-// Set correct API URL
-axios.defaults.baseURL = 'http://192.168.0.107:3000/api';
+import { localStorageService } from './services/localStorageService';
 import {
   Button,
   Modal,
@@ -15,105 +12,247 @@ import {
   Alert,
   Card,
   Empty,
+  Input,
+  Tooltip,
 } from 'antd';
-import { ExclamationCircleOutlined } from '@ant-design/icons';
-import ProductPageHeader from './components/ProductPageHeader';
+import { ExclamationCircleOutlined, PlusOutlined, UploadOutlined, FileExcelOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
 import ProductTable from './components/ProductTable';
 import ProductForm from './components/ProductForm';
-import ProductStats from './components/ProductStats';
+import { Product } from '../types/product';
 
-interface Product {
-  id: string;
-  sku: string;
-  name: string;
-  productType: string;
-  productCategory: string;
-  quantity: number;
-  costPricePerPiece?: number;
-  ratePerPiece?: number;
-  costPricePerInch?: number;
-  ratePerInch?: number;
-}
+// Helper function to check if a product is a whitespace entry
+const isWhitespaceEntry = (product: Product): boolean => {
+  const trimmedName = (product.name || '').trim();
+  const trimmedSku = (product.sku || '').trim();
+  const trimmedCategory = (product.productCategory || '').trim();
+  
+  // A product is considered a whitespace entry if all key fields are empty or only whitespace
+  return !trimmedName && !trimmedSku && !trimmedCategory;
+};
+
+// Helper function to remove whitespace entries from product list
+const removeWhitespaceEntries = (productList: Product[]): Product[] => {
+  const filtered = productList.filter(product => !isWhitespaceEntry(product));
+  const removedCount = productList.length - filtered.length;
+  if (removedCount > 0) {
+    console.log(`Removed ${removedCount} whitespace entry/entries from product list`);
+  }
+  return filtered;
+};
 
 const SimpleProductTab: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
   const [importing, setImporting] = useState(false);
   const [form] = Form.useForm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
-
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
-  // Load products from backend
+  // Append an inventory activity log to localStorage (increment/decrement tracking)
+  const appendInventoryLog = (product: Product, previousQuantity: number, newQuantity: number, reason: string, action: string = 'adjustment') => {
+    try {
+      const logs = JSON.parse(localStorage.getItem('inventoryActivityLogs') || '[]');
+      const prev = Number(previousQuantity || 0);
+      const next = Number(newQuantity || 0);
+      const delta = next - prev;
+      if (delta === 0) return; // No change, no log
+      const entry = {
+        id: `${Date.now()}-${product.id}-${Math.random().toString(36).slice(2, 8)}`,
+        itemId: product.id,
+        itemName: product.name,
+        action,
+        previousQuantity: prev,
+        newQuantity: next,
+        delta,
+        reason,
+        timestamp: new Date().toISOString(),
+        user: 'System',
+      };
+      logs.unshift(entry);
+      localStorage.setItem('inventoryActivityLogs', JSON.stringify(logs));
+    } catch (e) {
+      console.error('Failed to append inventory log', e);
+    }
+  };
+
+  // Load products from localStorage on component mount
+  useEffect(() => {
+    const localProducts = JSON.parse(localStorage.getItem('erp_inventory') || '[]');
+    console.log(`Loading ${localProducts.length} products from localStorage on component mount`);
+    const cleanedProducts = removeWhitespaceEntries(localProducts);
+    if (cleanedProducts.length !== localProducts.length) {
+      localStorage.setItem('erp_inventory', JSON.stringify(cleanedProducts));
+    }
+    setProducts(cleanedProducts);
+    setLoading(false);
+  }, []);
+
+  // Load products from localStorage only
   const fetchProducts = useCallback(async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get('/inventory', { withCredentials: true });
-        if (response.data) {
-          // Transform server data to match client-side Product interface
-          const transformedProducts = response.data.map((item: any) => ({
-            id: item.id,
-            sku: item.sku || '',
-            name: item.name || '',
-            productType: item.productType || 'Traded',
-            productCategory: item.category || '',
-            quantity: Number(item.quantity) || 0,
-            costPricePerPiece: item.costPricePerPiece,
-            ratePerPiece: item.ratePerPiece,
-            costPricePerInch: item.costPricePerInch,
-            ratePerInch: item.ratePerInch,
-          }));
-          
-          setProducts(transformedProducts);
-          // Update localStorage with fresh data
-          localStorage.setItem('simpleInventoryProducts', JSON.stringify(transformedProducts));
-        } else {
-          // Initialize with empty array if no data from backend
-          setProducts([]);
-          localStorage.setItem('simpleInventoryProducts', JSON.stringify([]));
-        }
+    try {
+      setLoading(true);
 
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch products');
-        console.error(err);
-        // Fallback to localStorage if backend fails
-        const savedProducts = localStorage.getItem('simpleInventoryProducts');
-        if (savedProducts) {
-          setProducts(JSON.parse(savedProducts));
-        } else {
-          setProducts([]);
-        }
-      } finally {
-        setLoading(false);
+      // Load from localStorage
+      const localProducts = JSON.parse(localStorage.getItem('erp_inventory') || '[]');
+      console.log(`Loading ${localProducts.length} products from localStorage`);
+      const cleanedProducts = removeWhitespaceEntries(localProducts);
+      if (cleanedProducts.length !== localProducts.length) {
+        localStorage.setItem('erp_inventory', JSON.stringify(cleanedProducts));
       }
-    }, []);
+      setProducts(cleanedProducts);
+      setError(null);
 
+      // If there's no data in erp_inventory, check if there's data in simpleInventoryProducts
+      if (cleanedProducts.length === 0) {
+        const hasFallbackData = localStorage.getItem('simpleInventoryProducts');
+        if (hasFallbackData) {
+          const fallbackData = JSON.parse(hasFallbackData);
+          if (fallbackData.length > 0) {
+            console.log('Using fallback data from simpleInventoryProducts:', fallbackData);
+            const cleanedFallback = removeWhitespaceEntries(fallbackData);
+            // Save to erp_inventory for future use
+            localStorage.setItem('erp_inventory', JSON.stringify(cleanedFallback));
+            setProducts(cleanedFallback);
+            setError(null);
+          }
+        }
+      }
+    } catch (err) {
+      setError('Failed to fetch products');
+      console.error('Error in fetchProducts:', err);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load products on component mount
   useEffect(() => {
     fetchProducts();
-
-    // Listen for authentication errors
-    const handleAuthError = () => {
-      // Trigger auth refresh
-      window.dispatchEvent(new CustomEvent('authRefresh'));
-    };
-
-    window.addEventListener('authError', handleAuthError);
-
-    return () => {
-      window.removeEventListener('authError', handleAuthError);
-    };
   }, [fetchProducts]);
 
-  // Save products to localStorage whenever they change
+  // Save products to localStorage whenever they change (with whitespace filtering)
   useEffect(() => {
     if (!loading) {
-      localStorage.setItem('simpleInventoryProducts', JSON.stringify(products));
+      const cleanedProducts = removeWhitespaceEntries(products);
+      localStorage.setItem('erp_inventory', JSON.stringify(cleanedProducts));
     }
   }, [products, loading]);
+
+  const handleDuplicateProduct = (product: Product) => {
+    const newProduct = { ...product, id: Date.now().toString() };
+    const productIndex = products.findIndex((p) => p.id === product.id);
+    const newProducts = [...products];
+    newProducts.splice(productIndex + 1, 0, newProduct);
+    const cleanedProducts = removeWhitespaceEntries(newProducts);
+    setProducts(cleanedProducts);
+    localStorageService.set('erp_inventory', cleanedProducts);
+    // Log stock creation for duplicated product (treat as new stock for the duplicate)
+    const dupQty = Number(newProduct.quantity || 0);
+    if (dupQty !== 0) {
+      appendInventoryLog(newProduct as Product, 0, dupQty, 'Product duplicated', 'duplicate');
+    }
+    message.success('Product duplicated successfully');
+  };
+
+  const handleDeleteSelected = () => {
+    Modal.confirm({
+      title: `Delete ${selectedRowKeys.length} Products`,
+      icon: <ExclamationCircleOutlined />,
+      content: 'Are you sure you want to delete the selected products? This action cannot be undone.',
+      okText: 'Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: () => {
+        try {
+          const toDelete = products.filter(p => selectedRowKeys.includes(p.id));
+          toDelete.forEach(p => {
+            const prevQty = Number(p.quantity || 0);
+            if (prevQty !== 0) {
+              appendInventoryLog(p, prevQty, 0, 'Bulk delete', 'delete');
+            }
+          });
+          const updatedProducts = products.filter(p => !selectedRowKeys.includes(p.id));
+          localStorage.setItem('erp_inventory', JSON.stringify(updatedProducts));
+          setProducts(updatedProducts);
+          setSelectedRowKeys([]);
+          message.success(`${selectedRowKeys.length} products have been deleted.`);
+        } catch (error) {
+          message.error('Failed to delete selected products.');
+          console.error('Error deleting selected products:', error);
+        }
+      },
+    });
+  };
+
+  const handleDeleteAllProducts = () => {
+    Modal.confirm({
+      title: 'Delete All Products',
+      icon: <ExclamationCircleOutlined />,
+      content: 'Are you sure you want to delete all products? This action cannot be undone.',
+      okText: 'Delete All',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: () => {
+        try {
+          // Log deletion for each product with non-zero stock
+          products.forEach(p => {
+            const prevQty = Number(p.quantity || 0);
+            if (prevQty !== 0) {
+              appendInventoryLog(p, prevQty, 0, 'Delete all products', 'delete');
+            }
+          });
+          localStorage.setItem('erp_inventory', JSON.stringify([]));
+          setProducts([]);
+          setSelectedRowKeys([]);
+          message.success('All products have been deleted.');
+        } catch (error) {
+          message.error('Failed to delete all products.');
+          console.error('Error deleting all products:', error);
+        }
+      },
+    });
+  };
+
+  const handleDownloadSelected = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warn('No products selected for download.');
+      return;
+    }
+
+    const selectedProducts = products.filter(p => selectedRowKeys.includes(p.id));
+
+    const dataToExport = selectedProducts.map(p => ({
+      'Product Type': p.productType,
+      'SKU': p.sku,
+      'Product Name': p.name,
+      'Product Category': p.productCategory,
+      'Size': p.size,
+      'Quantity': p.quantity,
+      'Cost Price per Piece': p.costPricePerPiece,
+      'Rate per Piece': p.ratePerPiece,
+      'Cost Price per Inch': p.costPricePerInch,
+      'Rate per Inch': p.ratePerInch,
+    }));
+    
+    const csv = Papa.unparse(dataToExport);
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'selected_products.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    message.success(`${selectedProducts.length} products downloaded successfully.`);
+  };
 
   const filteredProducts = useMemo(() => {
     if (!searchTerm) {
@@ -126,12 +265,11 @@ const SimpleProductTab: React.FC = () => {
     );
   }, [products, searchTerm]);
 
-
   const productCategories = useMemo(() => {
     const categories = new Set(products.map(p => p.productCategory).filter(Boolean));
     return Array.from(categories);
   }, [products]);
-  
+
   const { totalProducts, totalStock, totalValue } = useMemo(() => {
     const totalStock = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
     const totalValue = products.reduce((sum, p) => {
@@ -140,526 +278,350 @@ const SimpleProductTab: React.FC = () => {
     }, 0);
     return { totalProducts: products.length, totalStock, totalValue };
   }, [products]);
-  
-  const handleEditProduct = (product: Product) => {
-    console.log('Editing product:', product.name); // Debug log
-    // Set the product to be edited
-    setEditingProduct(product);
 
-    // Populate the form with the product data
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
     form.setFieldsValue({
       sku: product.sku,
       name: product.name,
-      productType: product.productType || 'Traded',
+      productType: product.productType,
       productCategory: product.productCategory,
+      size: product.size,
       quantity: product.quantity,
       costPricePerPiece: product.costPricePerPiece,
       ratePerPiece: product.ratePerPiece,
       costPricePerInch: product.costPricePerInch,
       ratePerInch: product.ratePerInch,
     });
-
-    // Show the form
-    console.log('Setting showAddForm to true'); // Debug log
-    setShowAddForm(true);
+    setIsModalVisible(true);
   };
 
-  const handleDeleteProduct = async (id: string) => {
+  const handleDeleteProduct = (product: Product) => {
     Modal.confirm({
-      title: 'Are you sure you want to delete this product?',
+      title: 'Delete Product',
       icon: <ExclamationCircleOutlined />,
-      content: 'This action cannot be undone.',
-      okText: 'Yes, delete',
+      content: `Are you sure you want to delete "${product.name}"?`,
+      okText: 'Delete',
       okType: 'danger',
       cancelText: 'Cancel',
-      onOk: async () => {
-      try {
-        // First delete from server
-        await axios.delete(`/inventory/${id}`, { withCredentials: true });
-        
-        // Then update local state
-        const updatedProducts = products.filter(product => product.id !== id);
-        setProducts(updatedProducts);
-        message.success('Product deleted successfully!');
-      } catch (err) {
-        setError('Failed to delete product');
-        console.error(err);
-        message.error('Failed to delete product.');
-      }
-     }
-    });
-  };
-
-  const handleDeleteAllProducts = async () => {
-    Modal.confirm({
-      title: 'Are you sure you want to delete ALL products?',
-      icon: <ExclamationCircleOutlined />,
-      content: 'This action is irreversible and will delete all products from the database.',
-      okText: 'Yes, delete all',
-      okType: 'danger',
-      cancelText: 'Cancel',
-      onOk: async () => {
-        try {
-          // First delete from server
-          await axios.delete('/inventory/all', { withCredentials: true });
-          
-          // Then update local state
-          setProducts([]);
-          message.success('All products deleted successfully!');
-        } catch (err) {
-          setError('Failed to delete all products');
-          console.error(err);
-          message.error('Failed to delete all products.');
+      onOk: () => {
+        const prevQty = Number(product.quantity || 0);
+        if (prevQty !== 0) {
+          appendInventoryLog(product, prevQty, 0, 'Product deleted', 'delete');
         }
-      }
+        const currentProducts = JSON.parse(localStorage.getItem('erp_inventory') || '[]');
+        const updatedProducts = currentProducts.filter((p: any) => p.id !== product.id);
+        localStorage.setItem('erp_inventory', JSON.stringify(updatedProducts));
+        setProducts(updatedProducts);
+        window.dispatchEvent(new CustomEvent('inventory:updated', { detail: updatedProducts }));
+        message.success('Product deleted successfully');
+      },
     });
   };
 
   const handleFormSubmit = async (values: any) => {
-    // Form validation
     if (!values.sku || !values.name || !values.productCategory) {
       message.error('SKU, Name, and Product Category are required');
       return;
     }
 
     try {
+      const currentProducts = JSON.parse(localStorage.getItem('erp_inventory') || '[]');
+
       if (editingProduct) {
-        // Update existing product
-        const updatedProduct: Product = {
+        const prevQty = Number(editingProduct.quantity || 0);
+        const newQty = Number((values.quantity ?? prevQty) || 0);
+        if (prevQty !== newQty) {
+          appendInventoryLog(editingProduct, prevQty, newQty, 'Manual update via product form', 'adjustment');
+        }
+        const updatedProduct = {
           ...values,
-          id: editingProduct.id
+          id: editingProduct.id,
+          sku: values.sku,
+          productCategory: values.productCategory,
+          size: values.size,
+          quantity: values.quantity,
+          updatedAt: new Date().toISOString()
         };
 
-        // Special handling for Laddu Gopal Mukut - clear inch-based pricing
-        if (updatedProduct.productCategory === 'Laddu Gopal Mukut') {
-          updatedProduct.costPricePerInch = undefined;
-          updatedProduct.ratePerInch = undefined;
-        }
-
-        // Update the product in the list
-        const updatedProducts = products.map(product => 
-          product.id === editingProduct.id ? updatedProduct : product
+        const updatedProducts = currentProducts.map((p: any) =>
+          p.id === editingProduct.id ? updatedProduct : p
         );
-        setProducts(updatedProducts);
-        message.success('Product updated successfully!');
-        
-        // Send the updated product to the server
-        try {
-          // First, try to find the product by SKU to get the server-generated ID
-          const allProducts = await axios.get('/inventory', { withCredentials: true });
-          const serverProduct = allProducts.data.find((p: any) => p.sku === updatedProduct.sku);
-          
-          if (serverProduct) {
-            // Use the server-generated ID for the update
-            await axios.put(`/inventory/${serverProduct.id}`, {
-            sku: updatedProduct.sku,
-            name: updatedProduct.name,
-            description: updatedProduct.name, // Use name as description
-            quantity: updatedProduct.quantity,
-            price: updatedProduct.ratePerPiece || 0, // Use ratePerPiece as price
-            category: updatedProduct.productCategory,
-            productType: updatedProduct.productType || '',
-            costPricePerPiece: updatedProduct.costPricePerPiece || 0,
-            ratePerPiece: updatedProduct.ratePerPiece || 0,
-            costPricePerInch: updatedProduct.costPricePerInch || 0,
-            ratePerInch: updatedProduct.ratePerInch || 0
-          }, { withCredentials: true });
-          
-          console.log('Product updated successfully on server');
-          } else {
-            console.error('Product not found on server');
-            alert('Product not found on server. Changes may not persist.');
-          }
-        } catch (error) {
-          console.error('Failed to update product on server:', error);
-          alert('Failed to update product on server. Changes may not persist.');
-        }
-
-        // Reset editing state
-        setEditingProduct(null);
+        const cleanedProducts = removeWhitespaceEntries(updatedProducts);
+        localStorage.setItem('erp_inventory', JSON.stringify(cleanedProducts));
+        setProducts(cleanedProducts);
+        window.dispatchEvent(new CustomEvent('inventory:updated', { detail: cleanedProducts }));
+        message.success('Product updated successfully');
       } else {
-        // Create a new product with ID
-        const newProductWithId: Product = {
+        const newProduct = {
           ...values,
-          id: 'prod-' + Date.now()
+          id: Date.now().toString(),
+          sku: values.sku,
+          productCategory: values.productCategory,
+          size: values.size,
+          quantity: values.quantity,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         };
-
-        // Special handling for Laddu Gopal Mukut - clear inch-based pricing
-        if (newProductWithId.productCategory === 'Laddu Gopal Mukut') {
-          newProductWithId.costPricePerInch = undefined;
-          newProductWithId.ratePerInch = undefined;
+        const initQty = Number(newProduct.quantity || 0);
+        if (initQty !== 0) {
+          appendInventoryLog(newProduct as Product, 0, initQty, 'Product created', 'create');
         }
+        console.log("DEBUG: All parameters of newly saved product:", JSON.stringify(newProduct, null, 2));
 
-        // First save to the server
-        try {
-          // Transform product data to match server expectations
-          const serverProduct = {
-            sku: newProductWithId.sku,
-            name: newProductWithId.name,
-            category: newProductWithId.productCategory, // Map productCategory to category
-            description: newProductWithId.name, // Use name as description
-            quantity: newProductWithId.quantity,
-            price: newProductWithId.ratePerPiece || 0, // Use ratePerPiece as price
-            productType: newProductWithId.productType || 'Traded',
-            costPricePerPiece: newProductWithId.costPricePerPiece ?? null,
-            ratePerPiece: newProductWithId.ratePerPiece ?? null,
-            costPricePerInch: newProductWithId.costPricePerInch ?? null,
-            ratePerInch: newProductWithId.ratePerInch ?? null
-          };
-
-          // Log the data being sent to server
-          console.log('Sending to server:', JSON.stringify(serverProduct, null, 2));
-
-          const response = await axios.post('/inventory', serverProduct, { withCredentials: true });
-
-          // Update the product with the server-generated ID
-          const savedProduct = {
-            ...newProductWithId,
-            id: response.data.id || newProductWithId.id
-          };
-
-          // Add the new product to the list with server ID
-          const updatedProducts = [...products, savedProduct];
-          setProducts(updatedProducts);
-          message.success('Product added successfully!');
-        } catch (error) {
-          console.error('Failed to save product to server:', error);
-          message.error('Failed to save product to server. Please try again.');
-          // Don't add to local state if server save failed
-          return;
-        }
+        const updatedProducts = [...currentProducts, newProduct];
+        const cleanedProducts = removeWhitespaceEntries(updatedProducts);
+        localStorage.setItem('erp_inventory', JSON.stringify(cleanedProducts));
+        setProducts(cleanedProducts);
+        window.dispatchEvent(new CustomEvent('inventory:updated', { detail: cleanedProducts }));
+        message.success('Product added successfully');
       }
 
-      // Reset form
+      setIsModalVisible(false);
+      setEditingProduct(null);
       form.resetFields();
-      setShowAddForm(false);
-    } catch (err) {
-      setError('Failed to add product');
-      console.error(err);
+    } catch (error) {
+      message.error('Failed to save product');
+      console.error(error);
     }
   };
 
-  // Function to download Excel template
-  const downloadTemplate = () => {
-    // Create a workbook with a worksheet
-    const wb = XLSX.utils.book_new();
-    
-    // Create template data with headers and sample rows
-    const templateData = [
-      // Headers
-      [
-        'Product Type', 
-        'SKU', 
-        'Product Name', 
-        'Product Category',
-        'Quantity', 
-        'Cost Price per Piece', 
-        'Rate per Piece', 
-        'Cost Price per Inch', 
-        'Rate per Inch'
-      ],
-      // Sample data - Mata Rani Base
-      [
-        'Manufactured',
-        'MRB-001',
-        'Mata Rani Base Red',
-        'Mata Rani Base',
-        '10',
-        '500',
-        '650',
-        '',
-        ''
-      ],
-      // Sample data - Laddu Gopal Base
-      [
-        'Manufactured',
-        'LGB-001',
-        'Laddu Gopal Base Yellow',
-        'Laddu Gopal Base',
-        '15',
-        '',
-        '',
-        '25',
-        '35'
-      ],
-      // Sample data - Laddu Gopal Mukut
-      [
-        'Manufactured',
-        'LGM-001',
-        'Laddu Gopal Mukut Golden',
-        'Laddu Gopal Mukut',
-        '8',
-        '350',
-        '450',
-        '',
-        ''
-      ],
-      // Sample data - Traded item
-      [
-        'Traded',
-        'TRD-001',
-        'Decorative Item',
-        'Others',
-        '20',
-        '150',
-        '200',
-        '',
-        ''
-      ]
-    ];
-    
-    // Create worksheet from template data
-    const ws = XLSX.utils.aoa_to_sheet(templateData);
-    
-    // Set column widths for better readability
-    ws['!cols'] = [
-      { wch: 15 }, // Product Type
-      { wch: 12 }, // SKU
-      { wch: 25 }, // Product Name
-      { wch: 20 }, // Product Category
-      { wch: 10 }, // Quantity
-      { wch: 18 }, // Cost Price per Piece
-      { wch: 15 }, // Rate per Piece
-      { wch: 18 }, // Cost Price per Inch
-      { wch: 15 }  // Rate per Inch
-    ];
-    
-    // Add the worksheet to the workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Product Template");
-    
-    // Add a second sheet with instructions
-    const instructionsData = [
-      ['Product Import Instructions'],
-      [''],
-      ['1. Fill in the product details in the "Product Template" sheet'],
-      ['2. Do not modify the column headers'],
-      ['3. All fields are required except for prices (use 0 if not applicable)'],
-      ['4. For Manufactured products:'],
-      ['   - Mata Rani Base, Laddu Gopal Base: Use Cost/Rate per Inch'],
-      ['   - Laddu Gopal Mukut: Use Cost/Rate per Piece'],
-      ['   - Other categories: Use either pricing model'],
-      ['5. For Traded products: Use Cost/Rate per Piece'],
-      ['6. Valid Product Categories:'],
-      ['   - Mata Rani Base'],
-      ['   - Laddu Gopal Base'],
-      ['   - Laddu Gopal Mukut'],
-      ['   - Laddu Gopal Accessories'],
-      ['   - Ganesh Lakhsmi Base'],
-      ['   - Booti'],
-      ['   - Others'],
-      ['   - Laces'],
-      ['   - Fabric'],
-      ['7. Save the file as Excel (.xlsx) format before importing']
-    ];
-    
-    const instructionsWs = XLSX.utils.aoa_to_sheet(instructionsData);
-    instructionsWs['!cols'] = [{ wch: 50 }]; // Set column width for instructions
-    XLSX.utils.book_append_sheet(wb, instructionsWs, "Instructions");
-    
-    // Generate Excel file and trigger download
-    XLSX.writeFile(wb, "product_import_template.xlsx");
-  };
-
-  // Function to handle file upload (CSV or Excel) - Frontend only
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    console.log(`File selected: ${file.name}, size: ${file.size}, type: ${file.type}`);
     setImporting(true);
-    setError(null);
 
-    try {
-      let rows: any[] = [];
+    const processData = (data: any[]) => {
+      try {
+        const importedProducts = data.map((row: any) => ({
+          id: Date.now().toString() + Math.random(),
+          productType: row['Product Type'] || 'Traded',
+          sku: row.SKU || '',
+          name: row['Product Name'] || '',
+          productCategory: (row['Product Category'] || '').toUpperCase(),
+          size: row.Size || '',
+          quantity: Number(row.Quantity) || 0,
+          unit: row.Unit || '',
+          costPricePerPiece: Number(row['Cost Price per Piece']) || 0,
+          ratePerPiece: Number(row['Rate per Piece']) || 0,
+          costPricePerInch: Number(row['Cost Price per Inch']) || 0,
+          ratePerInch: Number(row['Rate per Inch']) || 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
 
-      if (file.name.endsWith(".csv")) {
-        // Parse CSV
-        const text = await file.text();
-        const result = Papa.parse(text, { header: true, skipEmptyLines: true });
-        rows = result.data as any[];
-      } else if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
-        // Parse Excel
-        const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-      } else {
-        alert("Unsupported file type. Please upload CSV or Excel.");
-        return;
-      }
+        const currentProducts = JSON.parse(localStorage.getItem('erp_inventory') || '[]');
+        const cleanedImported = removeWhitespaceEntries(importedProducts);
+        const updatedProducts = removeWhitespaceEntries([...currentProducts, ...cleanedImported]);
+        localStorage.setItem('erp_inventory', JSON.stringify(updatedProducts));
+        setProducts(updatedProducts);
 
-      console.log("Parsed rows:", rows);
-
-      // Transform rows into Product objects
-      const transformedProducts: Product[] = rows.map((item: any) => {
-        const category = (item["Product Category"] || item["category"])?.trim() || "";
-        const isManufactured =
-          category === "Laddu Gopal Base" ||
-          category === "Laddu Gopal Dress" ||
-          category === "Laddu Gopal Mukut" ||
-          category === "RK Base" ||
-          category === "Mata Rani Base" ||
-          category === "Ganesh Lakshmi Base" ||
-          category === "Shyam Baba Base";
-
-        return {
-          id: "prod-" + Date.now() + Math.random(), // unique ID
-          sku: item["SKU"] || item["sku"] || "",
-          name: item["Product Name"] || item["name"] || "",
-          productType: item["Product Type"] || item["productType"] || "Traded",
-          productCategory: category,
-          quantity: Number(item["Quantity"] || item["quantity"] || 0),
-          costPricePerPiece:
-            (item["Cost Price per Piece"] || item["costPricePerPiece"]) !== undefined && (item["Cost Price per Piece"] || item["costPricePerPiece"]) !== ""
-              ? Number(item["Cost Price per Piece"] || item["costPricePerPiece"])
-              : undefined,
-          ratePerPiece:
-            (item["Rate per Piece"] || item["ratePerPiece"]) !== undefined && (item["Rate per Piece"] || item["ratePerPiece"]) !== ""
-              ? Number(item["Rate per Piece"] || item["ratePerPiece"])
-              : undefined,
-          costPricePerInch:
-            (item["Cost Price per Inch"] || item["costPricePerInch"]) !== undefined && (item["Cost Price per Inch"] || item["costPricePerInch"]) !== ""
-              ? Number(item["Cost Price per Inch"] || item["costPricePerInch"])
-              : undefined,
-          ratePerInch:
-            (item["Rate per Inch"] || item["ratePerInch"]) !== undefined && (item["Rate per Inch"] || item["ratePerInch"]) !== ""
-              ? Number(item["Rate per Inch"] || item["ratePerInch"])
-              : undefined,
-        };
-      });
-
-      // Merge with existing products instead of replacing
-      console.log('Previous products count:', products.length);
-      console.log('Imported products count:', transformedProducts.length);
-      // First save to the server
-      const saveToServer = async () => {
-        try {
-          for (const product of transformedProducts) {
-            // Transform product data to match server expectations
-            const serverProduct = {
-              sku: product.sku,
-              name: product.name,
-              category: product.productCategory, // Map productCategory to category
-              description: product.name, // Use name as description
-              quantity: product.quantity,
-              price: product.ratePerPiece || 0, // Use ratePerPiece as price
-              productType: product.productType || 'Traded',
-              costPricePerPiece: product.costPricePerPiece ?? null,
-              ratePerPiece: product.ratePerPiece ?? null,
-              costPricePerInch: product.costPricePerInch ?? null,
-              ratePerInch: product.ratePerInch ?? null
-            };
-            
-            // Log the data being sent to server
-            console.log('Sending to server:', JSON.stringify(serverProduct, null, 2));
-            
-            await axios.post('/api/inventory', serverProduct, { withCredentials: true });
+        // Log increments for each imported product with non-zero quantity
+        cleanedImported.forEach((p: any) => {
+          const qty = Number(p.quantity || 0);
+          if (qty !== 0) {
+            appendInventoryLog(p as Product, 0, qty, 'Imported', 'import');
           }
-          console.log('All products saved to server successfully');
-          
-          // After successful server save, update local state
-          setProducts((prevProducts) => {
-            console.log('Prev products count:', prevProducts.length);
-            const newProducts = [...prevProducts, ...transformedProducts];
-            console.log('New products count:', newProducts.length);
-            return newProducts;
-          });
-          alert(`Successfully imported ${transformedProducts.length} products!`);
-        } catch (err) {
-          console.error('Error saving products to server:', err);
-          setError('Failed to save products to server');
-          alert(`Error saving products to server: ${err instanceof Error ? err.message : "Unknown error"}`);
+        });
+
+        const removedCount = importedProducts.length - cleanedImported.length;
+        if (removedCount > 0) {
+          message.success(`Successfully imported ${cleanedImported.length} products (${removedCount} whitespace entries removed)`);
+        } else {
+          message.success(`Successfully imported ${cleanedImported.length} products`);
+        }
+      } catch (error) {
+        message.error('Failed to process imported products');
+        console.error('Error in processData:', error);
+      } finally {
+        setImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    if (file.name.endsWith('.csv')) {
+      Papa.parse(file, {
+        header: true,
+        complete: (results) => processData(results.data),
+        error: (error) => {
+          message.error('Failed to parse CSV file');
+          console.error('CSV parsing error:', error);
+          setImporting(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        },
+      });
+    } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          processData(jsonData);
+        } catch (error) {
+          message.error('Failed to parse Excel file');
+          console.error('XLSX parsing error:', error);
+          setImporting(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
         }
       };
-      
-      saveToServer();
-    } catch (err) {
-      console.error("Error importing file:", err);
-      setError("Failed to import products");
-      alert(`Error importing products: ${err instanceof Error ? err.message : "Unknown error"}`);
-    } finally {
+      reader.onerror = (error) => {
+        message.error('Failed to read file');
+        console.error('File reader error:', error);
+        setImporting(false);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      message.error('Unsupported file type. Please upload a .csv or .xlsx file.');
       setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
-  const handleCancelForm = () => {
-    setShowAddForm(false);
+  const handleAddProduct = () => {
     setEditingProduct(null);
     form.resetFields();
+    setIsModalVisible(true);
+  };
+  
+  const handleSelectionChange = (keys: React.Key[]) => {
+    setSelectedRowKeys(keys);
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '24px' }}>
+        <Alert
+          message="Error"
+          description={error}
+          type="error"
+          showIcon
+          style={{ margin: '20px 0' }}
+        />
+      </div>
+    );
   }
 
   return (
-    <div>
-      {/* Hidden file input for CSV and Excel import */}
+    <div style={{ background: '#f0f2f5', minHeight: '100vh', padding: '24px' }}>
+      <div style={{ background: '#fff', padding: 24, marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 20, color: 'rgba(0, 0, 0, 0.85)' }}>Product Management</h2>
+            <p style={{ margin: 0, color: 'rgba(0,0,0,.45)' }}>Manage your product inventory</p>
+          </div>
+          <Space key="actions">
+            <Button type="primary" onClick={handleAddProduct} icon={<PlusOutlined />}>Add Product</Button>
+            <Tooltip title="Download Excel template for importing products">
+              <a href="/inventory_template.xlsx" download="inventory_template.xlsx">
+                <Button icon={<FileExcelOutlined />}>Template</Button>
+              </a>
+            </Tooltip>
+            <Tooltip title="Import products from Excel or CSV file">
+              <Button onClick={() => fileInputRef.current?.click()} loading={importing} icon={<UploadOutlined />}>
+                {importing ? 'Importing...' : 'Import'}
+              </Button>
+            </Tooltip>
+          </Space>
+        </div>
+        <Input
+          placeholder="Search by SKU, Name, or Category..."
+          prefix={<SearchOutlined style={{ color: 'rgba(0,0,0,.25)' }} />}
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          allowClear
+        />
+      </div>
+      
       <input
         type="file"
         ref={fileInputRef}
+        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+        onChange={handleImport}
         style={{ display: 'none' }}
-        accept=".csv,.xlsx,.xls"
-        onChange={handleFileUpload}
       />
-      <ProductPageHeader
-        onAddProduct={() => setShowAddForm(true)}
-        onImport={() => fileInputRef.current?.click()}
-        onDownloadTemplate={downloadTemplate}
-        isImporting={importing}
-        searchTerm={searchTerm}
-        onSearch={setSearchTerm}
-      />
-      <ProductStats
-        totalProducts={totalProducts}
-        totalStock={totalStock}
-        totalValue={totalValue}
-      />
+      
+      <div>
+        {selectedRowKeys.length > 0 && (
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontWeight: 500 }}>{selectedRowKeys.length} items selected</span>
+            <Space>
+              <Button type="primary" onClick={handleDownloadSelected} icon={<FileExcelOutlined />}>
+                Download Selected
+              </Button>
+              <Button type="primary" danger onClick={handleDeleteSelected} icon={<DeleteOutlined />}>
+                Delete Selected
+              </Button>
+              <Button danger onClick={handleDeleteAllProducts} icon={<DeleteOutlined />}>
+                Delete All
+              </Button>
+            </Space>
+          </div>
+        )}
+        <Card>
+          {products.length === 0 ? (
+            <Empty
+              description="No products found. Click 'Add Product' or 'Import' to get started."
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
+          ) : (
+            <ProductTable
+              products={filteredProducts}
+              categories={productCategories}
+              onEdit={handleEditProduct}
+              onDelete={handleDeleteProduct}
+              onDuplicate={handleDuplicateProduct}
+              onSelectionChange={handleSelectionChange}
+            />
+          )}
+        </Card>
+      </div>
 
       <Modal
-        title={editingProduct ? 'Edit Product' : 'Add New Product'}
-        open={showAddForm}
-        onCancel={handleCancelForm}
+        title={editingProduct ? 'Edit Product' : 'Add Product'}
+        open={isModalVisible}
+        onCancel={() => {
+          setIsModalVisible(false);
+          setEditingProduct(null);
+          form.resetFields();
+        }}
         footer={null}
-        width={800}
-        destroyOnClose
+        width={600}
       >
         <ProductForm
           form={form}
           onFinish={handleFormSubmit}
-          onCancel={handleCancelForm}
+          productTypes={productCategories || []}
           isEditing={!!editingProduct}
-          productCategories={productCategories}
+          onCancel={() => {
+            setIsModalVisible(false);
+            setEditingProduct(null);
+            form.resetFields();
+          }}
         />
       </Modal>
-
-      {loading ? (
-        <div className="text-center py-12">
-          <Spin size="large" />
-          <div className="mt-4">Loading products...</div>
-        </div>
-      ) : error ? (
-        <Alert message="Error" description={error} type="error" showIcon />
-      ) : (
-        <Card className="animate-fade-in">
-          {filteredProducts.length > 0 ? (
-            <>
-              <ProductTable
-                products={filteredProducts}
-                onEdit={handleEditProduct}
-                onDelete={handleDeleteProduct}
-              />
-              <div style={{ marginTop: '1rem', textAlign: 'right' }}>
-                <Button type="link" danger onClick={handleDeleteAllProducts}>
-                  Delete All Products
-                </Button>
-              </div>
-            </>
-          ) : (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={searchTerm ? 'No products match your search' : 'No products found'}
-            />
-          )}
-        </Card>
-      )}
     </div>
   );
 };

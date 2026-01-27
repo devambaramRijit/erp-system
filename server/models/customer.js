@@ -42,6 +42,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    district: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     company: {
       type: DataTypes.STRING,
       allowNull: true
@@ -53,10 +57,24 @@ module.exports = (sequelize, DataTypes) => {
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    landmark: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW
     }
   }, {
     timestamps: true, // Adds createdAt and updatedAt fields
-    tableName: 'customers'
+    tableName: 'Customers'
   });
 
   return Customer;

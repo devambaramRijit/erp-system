@@ -19,6 +19,7 @@ export interface CustomerData {
   company?: string; // Database field
   taxId?: string; // Database field
   notes?: string; // Database field
+  createdAt?: string;
 }
 
 // Load customers from local storage or use default data

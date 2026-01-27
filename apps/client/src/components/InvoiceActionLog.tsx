@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Modal, Tag, Typography, Space } from 'antd';
 import { HistoryOutlined } from '@ant-design/icons';
-import actionLogService from '../services/actionLogService';
 import moment from 'moment';
 
 const { Title, Text } = Typography;
@@ -10,16 +9,16 @@ const { Title, Text } = Typography;
 interface ActionLogProps {
   visible: boolean;
   onClose: () => void;
-  invoiceId?: string;
-  invoiceNumber?: string;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
 }
 
 interface ActionLogEntry {
-  id: number;
-  invoiceId: number;
+  id: string;
+  invoiceId: string;
   invoiceNumber: string;
   action: string;
-  actionDate: string;
+  timestamp: string;
   userId?: number;
   username?: string;
   details?: string;
@@ -32,25 +31,26 @@ const InvoiceActionLog: React.FC<ActionLogProps> = ({
   invoiceNumber 
 }) => {
   const [actionLogs, setActionLogs] = useState<ActionLogEntry[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (visible && invoiceId) {
-      fetchActionLogs();
+    if (visible) {
+      loadActionLogs();
     }
   }, [visible, invoiceId]);
 
-  const fetchActionLogs = async () => {
-    if (!invoiceId) return;
-
-    setLoading(true);
+  const loadActionLogs = () => {
     try {
-      const logs = await actionLogService.getActionLogsByInvoiceId(invoiceId);
-      setActionLogs(logs);
+      const allLogs = JSON.parse(localStorage.getItem('action_logs') || '[]') as ActionLogEntry[];
+      let filteredLogs = allLogs;
+      if (invoiceId) {
+        filteredLogs = allLogs.filter(log => log.invoiceId === invoiceId);
+      }
+      // Sort by most recent first
+      filteredLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setActionLogs(filteredLogs);
     } catch (error) {
-      console.error('Error fetching action logs:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading action logs from localStorage:', error);
+      setActionLogs([]);
     }
   };
 
@@ -58,6 +58,7 @@ const InvoiceActionLog: React.FC<ActionLogProps> = ({
     switch (action) {
       case 'created':
         return 'green';
+      case 'editted':
       case 'updated':
         return 'blue';
       case 'deleted':
@@ -71,22 +72,31 @@ const InvoiceActionLog: React.FC<ActionLogProps> = ({
 
   const columns = [
     {
-      title: 'Date & Time',
-      dataIndex: 'actionDate',
-      key: 'actionDate',
-      render: (date: string) => moment(date).format('YYYY-MM-DD HH:mm:ss'),
+      title: 'Date of Action',
+      dataIndex: 'timestamp',
+      key: 'dateOfAction',
+      render: (date: string) => moment(date).format('YYYY-MM-DD'),
       sorter: (a: ActionLogEntry, b: ActionLogEntry) => 
-        new Date(a.actionDate).getTime() - new Date(b.actionDate).getTime(),
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     },
     {
-      title: 'Action',
-      dataIndex: 'action',
-      key: 'action',
-      render: (action: string) => (
-        <Tag color={getActionColor(action)}>
-          {action.charAt(0).toUpperCase() + action.slice(1)}
-        </Tag>
-      ),
+      title: 'Time of Action',
+      dataIndex: 'timestamp',
+      key: 'timeOfAction',
+      render: (date: string) => moment(date).format('HH:mm:ss'),
+    },
+    {
+        title: 'Status',
+        dataIndex: 'action',
+        key: 'action',
+        render: (action: string) => {
+          const statusText = action.charAt(0).toUpperCase() + action.slice(1);
+          return (
+            <Tag color={getActionColor(action)}>
+              {statusText}
+            </Tag>
+          );
+        }
     },
     {
       title: 'User',
@@ -95,33 +105,40 @@ const InvoiceActionLog: React.FC<ActionLogProps> = ({
       render: (username: string) => username || 'System',
     },
     {
+        title: 'Invoice Number',
+        dataIndex: 'invoiceNumber',
+        key: 'invoiceNumber',
+    },
+    {
       title: 'Details',
       dataIndex: 'details',
       key: 'details',
     },
   ];
+  
+  // If we are viewing logs for a single invoice, don't show the invoice number column
+  const finalColumns = invoiceId ? columns.filter(c => c.key !== 'invoiceNumber') : columns;
 
   return (
     <Modal
       title={
         <Space>
           <HistoryOutlined />
-          <span>Action Log for Invoice: {invoiceNumber}</span>
+          <span>{invoiceId ? `Action Log for Invoice: ${invoiceNumber}` : 'All Action Logs'}</span>
         </Space>
       }
-      visible={visible}
+      open={visible}
       onCancel={onClose}
       footer={null}
-      width={800}
+      width={invoiceId ? 800 : 1000}
     >
       <Table
-        columns={columns}
+        columns={finalColumns}
         dataSource={actionLogs}
         rowKey="id"
-        loading={loading}
         pagination={{ pageSize: 10 }}
         locale={{
-          emptyText: 'No action logs found for this invoice',
+          emptyText: 'No action logs found',
         }}
       />
     </Modal>

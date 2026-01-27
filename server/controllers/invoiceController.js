@@ -1,11 +1,12 @@
-const { Invoice } = require('../models');
-const actionLogController = require('./actionLogController');
+console.log('--- [DEBUG] Loading invoiceController.js ---');
+const { Invoice, Inventory, sequelize } = require('../models');
 
 // Get all invoices
 exports.getAllInvoices = async (req, res) => {
   try {
-    const invoices = await Invoice.findAll();
-    res.json(invoices);
+    // The getter in the Invoice model will automatically parse the 'items' field
+    const invoices = await Invoice.findAll({ order: [['date', 'DESC']] });
+    res.json(invoices.map(invoice => invoice.get({ plain: true })));
   } catch (error) {
     console.error('Error fetching invoices:', error);
     res.status(500).json({ error: 'Failed to fetch invoices' });
@@ -17,7 +18,7 @@ exports.getInvoiceById = async (req, res) => {
   try {
     const invoice = await Invoice.findByPk(req.params.id);
     if (invoice) {
-      res.json(invoice);
+      res.json(invoice.get({ plain: true }));
     } else {
       res.status(404).json({ error: 'Invoice not found' });
     }
@@ -29,36 +30,35 @@ exports.getInvoiceById = async (req, res) => {
 
 // Create new invoice
 exports.createInvoice = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
-    // Check if invoice number already exists
-    const existingInvoice = await Invoice.findOne({
-      where: { invoiceNumber: req.body.invoiceNumber }
-    });
-    
+    const { items, ...invoiceData } = req.body;
+
+    const existingInvoice = await Invoice.findOne({ where: { invoiceNumber: invoiceData.invoiceNumber } });
     if (existingInvoice) {
+      // No transaction started yet, so no need to rollback
       return res.status(400).json({ error: 'Invoice number already exists' });
     }
-    
-    const newInvoice = await Invoice.create(req.body);
-    
-    // Log the action
-    try {
-      const userId = req.user ? req.user.id : null;
-      const username = req.user ? req.user.username : null;
-      await actionLogController.createActionLog(
-        newInvoice.id,
-        newInvoice.invoiceNumber,
-        'created',
-        userId,
-        username,
-        `Invoice ${newInvoice.invoiceNumber} was created`
-      );
-    } catch (logError) {
-      console.error('Error logging invoice creation:', logError);
+
+    const newInvoice = await Invoice.create({ ...invoiceData, items }, { transaction: t });
+
+    if (items && Array.isArray(items)) {
+      for (const item of items) {
+        if (item.productId && item.quantity > 0) {
+          await Inventory.decrement('quantity', {
+            by: item.quantity,
+            where: { id: item.productId },
+            transaction: t
+          });
+        }
+      }
     }
-    
-    res.status(201).json(newInvoice);
+
+    await t.commit();
+    // The created invoice object (newInvoice) has items as an array due to the model's getter
+    res.status(201).json(newInvoice.get({ plain: true }));
   } catch (error) {
+    await t.rollback();
     console.error('Error creating invoice:', error);
     res.status(500).json({ error: 'Failed to create invoice' });
   }
@@ -66,71 +66,84 @@ exports.createInvoice = async (req, res) => {
 
 // Update invoice
 exports.updateInvoice = async (req, res) => {
-  try {
-    const updated = await Invoice.update(req.body, {
-      where: { id: req.params.id }
-    });
-    if (updated[0] === 1) {
-      const updatedInvoice = await Invoice.findByPk(req.params.id);
-      
-      // Log the action
-      try {
-        const userId = req.user ? req.user.id : null;
-        const username = req.user ? req.user.username : null;
-        await actionLogController.createActionLog(
-          updatedInvoice.id,
-          updatedInvoice.invoiceNumber,
-          'updated',
-          userId,
-          username,
-          `Invoice ${updatedInvoice.invoiceNumber} was updated`
-        );
-      } catch (logError) {
-        console.error('Error logging invoice update:', logError);
-      }
-      
-      res.json(updatedInvoice);
-    } else {
-      res.status(404).json({ error: 'Invoice not found' });
+    console.log('--- RUNNING UPDATE INVOICE ---');
+    const t = await sequelize.transaction();
+    try {
+        const { items: newItems, ...invoiceData } = req.body;
+        const invoiceId = req.params.id;
+
+        console.log('Received newItems:', JSON.stringify(newItems, null, 2));
+
+        const invoice = await Invoice.findByPk(invoiceId, { transaction: t });
+        if (!invoice) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Invoice not found' });
+        }
+
+        // The model's getter automatically parses the JSON string
+        const oldItems = invoice.items || [];
+
+        // Revert old inventory quantities
+        for (const item of oldItems) {
+            if (item.productId && item.quantity > 0) {
+                await Inventory.increment('quantity', { by: item.quantity, where: { id: item.productId }, transaction: t });
+            }
+        }
+
+        // Apply new inventory quantities
+        for (const item of newItems) {
+            if (item.productId && item.quantity > 0) {
+                await Inventory.decrement('quantity', { by: item.quantity, where: { id: item.productId }, transaction: t });
+            }
+        }
+
+        // Update the invoice itself with the new data
+        invoice.set(invoiceData);
+        invoice.items = newItems;
+        const updatedInvoice = await invoice.save({ transaction: t });
+
+        await t.commit();
+        console.log('--- UPDATE SUCCESSFUL ---');
+        res.json(updatedInvoice.get({ plain: true }));
+    } catch (error) {
+        await t.rollback();
+        console.error('Error updating invoice:', error);
+        console.log('--- UPDATE FAILED ---');
+        res.status(500).json({ error: 'Failed to update invoice' });
     }
-  } catch (error) {
-    console.error('Error updating invoice:', error);
-    res.status(500).json({ error: 'Failed to update invoice' });
-  }
 };
 
 // Delete invoice
 exports.deleteInvoice = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
-    // Get invoice details before deletion for logging
-    const invoice = await Invoice.findByPk(req.params.id);
-    
-    const deleted = await Invoice.destroy({
-      where: { id: req.params.id }
-    });
-    
-    if (deleted === 1) {
-      // Log the action
-      try {
-        const userId = req.user ? req.user.id : null;
-        const username = req.user ? req.user.username : null;
-        await actionLogController.createActionLog(
-          invoice.id,
-          invoice.invoiceNumber,
-          'deleted',
-          userId,
-          username,
-          `Invoice ${invoice.invoiceNumber} was deleted`
-        );
-      } catch (logError) {
-        console.error('Error logging invoice deletion:', logError);
-      }
-      
-      res.json({ message: 'Invoice deleted successfully' });
-    } else {
-      res.status(404).json({ error: 'Invoice not found' });
+    const invoice = await Invoice.findByPk(req.params.id, { transaction: t });
+    if (!invoice) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Invoice not found' });
     }
+
+    const items = invoice.items || [];
+    
+    // Restock inventory for the deleted invoice's items
+    if (items && Array.isArray(items)) {
+      for (const item of items) {
+        if (item.productId && item.quantity > 0) {
+          await Inventory.increment('quantity', {
+            by: item.quantity,
+            where: { id: item.productId },
+            transaction: t
+          });
+        }
+      }
+    }
+
+    await invoice.destroy({ transaction: t });
+
+    await t.commit();
+    res.json({ message: 'Invoice deleted successfully' });
   } catch (error) {
+    await t.rollback();
     console.error('Error deleting invoice:', error);
     res.status(500).json({ error: 'Failed to delete invoice' });
   }
@@ -139,35 +152,11 @@ exports.deleteInvoice = async (req, res) => {
 // Finalize invoice
 exports.finalizeInvoice = async (req, res) => {
   try {
-    const invoice = await Invoice.findByPk(req.params.id);
-    
-    if (!invoice) {
-      return res.status(404).json({ error: 'Invoice not found' });
-    }
-    
-    // Update invoice status to finalized
-    const updated = await Invoice.update(
-      { status: 'finalized' },
-      { where: { id: req.params.id } }
-    );
-    
-    if (updated[0] === 1) {
-      // Log the action
-      try {
-        const userId = req.user ? req.user.id : null;
-        const username = req.user ? req.user.username : null;
-        await actionLogController.createActionLog(
-          invoice.id,
-          invoice.invoiceNumber,
-          'finalized',
-          userId,
-          username,
-          `Invoice ${invoice.invoiceNumber} was finalized`
-        );
-      } catch (logError) {
-        console.error('Error logging invoice finalization:', logError);
-      }
-      
+    const [updatedCount] = await Invoice.update({ status: 'finalized' }, {
+      where: { id: req.params.id }
+    });
+
+    if (updatedCount) {
       res.json({ message: 'Invoice finalized successfully' });
     } else {
       res.status(404).json({ error: 'Invoice not found' });

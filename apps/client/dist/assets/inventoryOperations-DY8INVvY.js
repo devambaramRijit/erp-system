@@ -1,0 +1,1 @@
+const g=(n,a)=>{const t=localStorage.getItem("inventoryMonthlySalesData"),r=t?JSON.parse(t):[],e=new Date,l=n||e.toLocaleString("default",{month:"long"}),s=a||e.getFullYear().toString();return r.filter(o=>o.month===l&&o.year===s)};export{g as getMonthlySalesReport};

@@ -14,7 +14,18 @@ router.post('/logout', authController.logout);
 // Get current user
 router.get('/me', authController.getCurrentUser);
 
+
+
 // Get all app data (products and customers)
+
 router.get('/app-data', authController.getAppData);
+
+
+
+// Refresh token
+
+router.post('/refresh-token', authController.refreshToken);
+
+
 
 module.exports = router;

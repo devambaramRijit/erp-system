@@ -49,7 +49,8 @@ router.post('/import', upload.single('file'), async (req, res) => {
           postalCode: row['Postal Code'] || row['postalCode'] || '',
           company: row['Company'] || row['company'] || '',
           taxId: row['Tax ID'] || row['GST Number'] || row['gstNumber'] || '',
-          notes: row['Notes'] || row['notes'] || ''
+          notes: row['Notes'] || row['notes'] || '',
+          createdAt: new Date(),
         };
 
         // Validate required fields

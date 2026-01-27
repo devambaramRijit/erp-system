@@ -25,8 +25,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     (async () => {
       try {
-        const me = await api.get<SessionUser>("/auth/me");
-        if (mounted) setUser(me);
+        const data = await api.get<{ user: SessionUser; products: any[]; customers: any[] }>("/auth/me");
+        if (mounted) {
+          setUser(data.user);
+          setProducts(data.products);
+          setCustomers(data.customers);
+        }
       } catch (_) {
         // not logged in
       } finally {

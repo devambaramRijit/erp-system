@@ -4,7 +4,7 @@ const cors = require('cors');
 const session = require('express-session');
 const SequelizeStore = require('connect-session-sequelize')(session.Store);
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Initialize models
 const db = require('./models');
@@ -19,7 +19,7 @@ const sessionStore = new SequelizeStore({
 
 // Middleware
 app.use(cors({ 
-  origin: ['http://localhost:5173', 'http://192.168.0.101:5173', 'http://192.168.0.107:5173'], 
+  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:8081', 'http://192.168.0.101:5173', 'http://192.168.0.107:5173'], 
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -44,11 +44,17 @@ app.use(express.static(path.join(__dirname, '../apps/client/dist')));
 const authRoutes = require('./routes/auth');
 const invoiceRoutes = require('./routes/invoice');
 const inventoryRoutes = require('./routes/inventory');
-const customerRoutes = require('./routes/customer');
+const customerRoutes =require('./routes/customer');
 const actionLogRoutes = require('./routes/actionLog');
+const pincodeRoutes = require('./routes/pincode');
+const { authMiddleware } = require('./middleware/authMiddleware');
+
+// Apply auth middleware
+app.use(authMiddleware);
+
 
 // Sync database models
-db.sequelize.sync({ force: false }).then(() => {
+db.sequelize.sync().then(() => {
   console.log('Database synchronized');
 
   // Sync the session store
@@ -59,7 +65,7 @@ db.sequelize.sync({ force: false }).then(() => {
   const adminPassword = bcrypt.hashSync('admin123', 8);
 
   User.findOrCreate({
-    where: { username: 'admin' },
+    where: { email: 'admin@example.com' },
     defaults: {
       username: 'admin',
       email: 'admin@example.com',
@@ -71,8 +77,8 @@ db.sequelize.sync({ force: false }).then(() => {
       console.log('Default admin user created');
     } else {
       // Update the password for existing admin user to ensure it's correct
-      user.update({ password: adminPassword });
-      console.log('Admin user password updated');
+      user.update({ password: adminPassword, username: 'admin' });
+      console.log('Admin user password and username updated');
     }
   });
 
@@ -128,64 +134,64 @@ db.sequelize.sync({ force: false }).then(() => {
     console.error('Error checking inventory count:', error);
   });
 
-  // Create initial customer data if none exists
-  const { Customer } = db;
-
-  // Check if we have any customers
-  Customer.count().then(count => {
-    if (count === 0) {
-      // Create sample customers
-      Customer.bulkCreate([
-        {
-          name: 'John Doe',
-          email: 'john.doe@example.com',
-          phone: '555-123-4567',
-          address: '123 Main St',
-          city: 'Anytown',
-          state: 'CA',
-          country: 'USA',
-          postalCode: '12345',
-          company: 'Doe Enterprises',
-          taxId: 'TAX123456',
-          notes: 'Regular customer, prefers email communication'
-        },
-        {
-          name: 'Jane Smith',
-          email: 'jane.smith@example.com',
-          phone: '555-987-6543',
-          address: '456 Oak Ave',
-          city: 'Somewhere',
-          state: 'NY',
-          country: 'USA',
-          postalCode: '67890',
-          company: 'Smith & Co',
-          taxId: 'TAX789012',
-          notes: 'VIP customer, prefers phone communication'
-        },
-        {
-          name: 'Robert Johnson',
-          email: 'robert.j@example.com',
-          phone: '555-456-7890',
-          address: '789 Pine Rd',
-          city: 'Elsewhere',
-          state: 'TX',
-          country: 'USA',
-          postalCode: '54321',
-          company: 'Johnson Inc',
-          taxId: 'TAX345678',
-          notes: 'New customer, potential for large orders'
-        }
-      ]).then(() => {
-        console.log('Initial customer data created');
-      }).catch(error => {
-        console.error('Error creating initial customer data:', error);
-      });
-    } else {
-      console.log(`Found ${count} existing customers`);
-    }
-  }).catch(error => {
-    console.error('Error checking customer count:', error);
-  });
+  // Create initial customer data if none exists - DISABLED
+  // const { Customer } = db;
+  //
+  // // Check if we have any customers
+  // Customer.count().then(count => {
+  //   if (count === 0) {
+  //     // Create sample customers
+  //     Customer.bulkCreate([
+  //       {
+  //         name: 'John Doe',
+  //         email: 'john.doe@example.com',
+  //         phone: '555-123-4567',
+  //         address: '123 Main St',
+  //         city: 'Anytown',
+  //         state: 'CA',
+  //         country: 'USA',
+  //         postalCode: '12345',
+  //         company: 'Doe Enterprises',
+  //         taxId: 'TAX123456',
+  //         notes: 'Regular customer, prefers email communication'
+  //       },
+  //       {
+  //         name: 'Jane Smith',
+  //         email: 'jane.smith@example.com',
+  //         phone: '555-987-6543',
+  //         address: '456 Oak Ave',
+  //         city: 'Somewhere',
+  //         state: 'NY',
+  //         country: 'USA',
+  //         postalCode: '67890',
+  //         company: 'Smith & Co',
+  //         taxId: 'TAX789012',
+  //         notes: 'VIP customer, prefers phone communication'
+  //       },
+  //       {
+  //         name: 'Robert Johnson',
+  //         email: 'robert.j@example.com',
+  //         phone: '555-456-7890',
+  //         address: '789 Pine Rd',
+  //         city: 'Elsewhere',
+  //         state: 'TX',
+  //         country: 'USA',
+  //         postalCode: '54321',
+  //         company: 'Johnson Inc',
+  //         taxId: 'TAX345678',
+  //         notes: 'New customer, potential for large orders'
+  //       }
+  //     ]).then(() => {
+  //       console.log('Initial customer data created');
+  //     }).catch(error => {
+  //       console.error('Error creating initial customer data:', error);
+  //     });
+  //   } else {
+  //     console.log(`Found ${count} existing customers`);
+  //   }
+  // }).catch(error => {
+  //   console.error('Error checking customer count:', error);
+  // });
 });
 
 // Health check endpoint
@@ -205,6 +211,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/products', inventoryRoutes); // Alias for inventory routes
 app.use('/api/customers', customerRoutes);
 app.use('/api/action-logs', actionLogRoutes);
+app.use('/api/pincodes', pincodeRoutes);
 
 // Debug: Log registered routes
 console.log('Registered customer routes:');

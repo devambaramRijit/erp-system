@@ -1,0 +1,82 @@
+.ai-agent-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 350px;
+  height: 500px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+
+.ai-agent-header {
+  padding: 10px;
+  background-color: #f1f1f1;
+  border-bottom: 1px solid #ccc;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.ai-agent-header h2 {
+  margin: 0;
+  font-size: 1.2em;
+}
+
+.ai-agent-messages {
+  flex-grow: 1;
+  padding: 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-agent-message {
+  padding: 8px 12px;
+  border-radius: 18px;
+  max-width: 80%;
+  word-wrap: break-word;
+}
+
+.ai-agent-message.user {
+  background-color: #007bff;
+  color: white;
+  align-self: flex-end;
+}
+
+.ai-agent-message.agent {
+  background-color: #f1f1f1;
+  color: black;
+  align-self: flex-start;
+}
+
+.ai-agent-input {
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid #ccc;
+}
+
+.ai-agent-input input {
+  flex-grow: 1;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 8px;
+  margin-right: 10px;
+}
+
+.ai-agent-input button {
+  border: none;
+  background-color: #007bff;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.ai-agent-input button:hover {
+  background-color: #0056b3;
+}

@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["apps/packages/shared/*"]
+    }
+  },
+  "references": [
+    { "path": "apps/client" },
+    { "path": "apps/server" }
+  ]
+}

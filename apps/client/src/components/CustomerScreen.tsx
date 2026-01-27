@@ -1,5 +1,5 @@
 // components/CustomerScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Button,
@@ -41,23 +41,49 @@ const { Title, Text } = Typography;
 const { Dragger } = Upload;
 
 const CustomerScreen = () => {
-  const { customers, isLoading, searchTerm, handleSearch, refreshCustomers } = useCustomerManagement();
   const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  useEffect(() => {
+    refreshCustomers();
+  }, []);
+
   const refreshCustomers = async () => {
     setIsLoading(true);
+    
+    // Force clear localStorage to ensure fresh data
+    localStorage.removeItem('customers');
+    console.log('[DEBUG] Cleared customers from localStorage');
+    
     try {
-      const response = await api.get('/customers');
+      console.log('[DEBUG] Attempting to fetch customers from API...');
+      
+      // Add cache-busting timestamp to force fresh response
+      const timestamp = new Date().getTime();
+      const response = await api.get(`/customers?t=${timestamp}`);
+      console.log('[DEBUG] API response:', response);
+      
       if (Array.isArray(response)) {
-        setCustomers(response);
-        localStorage.setItem('customers', JSON.stringify(response));
+        console.log('[DEBUG] API returned customers array with length:', response.length);
+        
+        // Force empty array for testing
+        console.log('[DEBUG] Forcing empty customers array for testing');
+        setCustomers([]);
+        
+        // Don't save to localStorage to test if data persists
+        // localStorage.setItem('customers', JSON.stringify(response));
+        console.log('[DEBUG] Not saving customers to localStorage (testing)');
+      } else {
+        console.log('[DEBUG] API did not return an array, response:', response);
+        setCustomers([]);
       }
     } catch (error) {
-      console.error("Failed to refresh customers from API, using localStorage.", error);
-      const saved = localStorage.getItem('customers');
-      if (saved) setCustomers(JSON.parse(saved));
+      console.error("[DEBUG] Failed to refresh customers from API, setting empty array.", error);
+      
+      // Don't use localStorage even if API fails
+      setCustomers([]);
+      console.log('[DEBUG] Ignoring localStorage data and setting empty array');
     } finally {
       setIsLoading(false);
     }
@@ -161,9 +187,7 @@ const CustomerScreen = () => {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      const result = await api.post('/customers/import-excel', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const result = await api.post('/customers/import', formData, true);
 
       if (result.success) {
         message.success(
@@ -193,8 +217,10 @@ const CustomerScreen = () => {
         District: "Andheri",
         State: "Maharashtra",
         "PIN Code": "400001",
+        Country: "India",
         Source: "Direct",
-        Notes: "Sample customer"
+        Notes: "Sample customer",
+        Landmark: "Near City Mall"
       }
     ];
 

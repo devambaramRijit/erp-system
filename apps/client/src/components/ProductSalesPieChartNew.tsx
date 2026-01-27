@@ -28,15 +28,16 @@ const ProductSalesPieChart: React.FC<ProductSalesPieChartProps> = ({
       return [];
     }
 
+    const upperSelectedCategory = selectedCategory.toUpperCase();
     // Filter inventory items by selected category
     const categoryItems = selectedCategory === 'All'
       ? inventoryItems
-      : inventoryItems.filter(item => item.category && item.category.toLowerCase() === selectedCategory.toLowerCase());
+      : inventoryItems.filter(item => item.category && item.category.toUpperCase() === upperSelectedCategory);
 
     // Debug category matching
     if (selectedCategory !== 'All') {
       const allCategories = [...new Set(inventoryItems.map(item => item.category))];
-      const matchingCategories = allCategories.filter(cat => cat && cat.toLowerCase() === selectedCategory.toLowerCase());
+      const matchingCategories = allCategories.filter(cat => cat && cat.toUpperCase() === upperSelectedCategory);
       console.log('Category debugging:', {
         selectedCategory,
         allCategories: allCategories.slice(0, 10), // Show first 10 categories

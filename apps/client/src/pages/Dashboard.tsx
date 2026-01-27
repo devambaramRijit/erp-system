@@ -141,7 +141,8 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     if (selectedInventoryCategory === 'All') {
       return inventoryItems;
     }
-    return inventoryItems.filter(item => item.category === selectedInventoryCategory);
+    const upperSelectedCategory = selectedInventoryCategory.toUpperCase();
+    return inventoryItems.filter(item => item.category?.toUpperCase() === upperSelectedCategory);
   }, [inventoryItems, selectedInventoryCategory]);
 
   const salesInRange = useMemo(() => {

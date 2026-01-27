@@ -30,6 +30,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ onProductAdded, onCancel }) =
   // Handle product type change
   const handleProductTypeChange = (value: string) => {
     setProductType(value);
+
+    if (value === 'Manufactured') {
+      form.setFieldsValue({ quantity: 0 });
+    }
     
     // If product type is Traded, disable inch-based pricing
     if (value === 'Traded') {
@@ -146,13 +150,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ onProductAdded, onCancel }) =
         </Select>
       </Form.Item>
 
-      <Form.Item
-        name="quantity"
-        label="Quantity"
-        rules={[{ required: true, message: 'Please input quantity!' }]}
-      >
-        <InputNumber min={0} style={{ width: '100%' }} />
-      </Form.Item>
+      {productType === 'Traded' && (
+        <Form.Item
+          name="quantity"
+          label="Quantity"
+          rules={[{ required: true, message: 'Please input quantity!' }]}
+        >
+          <InputNumber min={0} style={{ width: '100%' }} />
+        </Form.Item>
+      )}
 
       <Form.Item
         name="price"

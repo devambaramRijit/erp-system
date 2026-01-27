@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from './api';
+import { dataSyncService } from './services/dataSyncService';
+import { googleDriveSyncService } from './services/googleDriveSyncService';
 
-// Set correct API URL
-axios.defaults.baseURL = 'http://192.168.0.107:3000/api';
 import { LoginForm } from './components/LoginForm';
 import { Dashboard } from './pages/Dashboard';
 import InventoryScreen from './InventoryScreen';
@@ -11,77 +11,92 @@ import ProductManagementUpdated from './ProductManagementUpdated';
 import InvoiceScreen from './InvoiceScreen';
 import InvoiceNavigation from './InvoiceNavigation';
 import CustomerScreen from './CustomerScreen';
+import SalesReportsScreen from './pages/SalesReportsScreen';
+import InventoryReportScreen from './pages/InventoryReportScreen';
+import ExpensesReportScreen from './pages/ExpensesReportScreen';
+import EmployeesScreen from './pages/EmployeesScreen';
+import ExpensesScreen from './pages/ExpensesScreen';
+import InvoiceHistoryScreen from './pages/InvoiceHistoryScreen';
+import InventoryHistoryScreen from './pages/InventoryHistoryScreen';
+import UserSettings from './components/UserSettings';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ConfigProvider, theme, message, Layout } from 'antd';
 import SidebarNavigation from './components/SidebarNavigation';
-import { DesignSystem, antdTheme, colors, spacing, borderRadius } from './styles/DesignSystem';
+import DesignSystemProvider from './styles/DesignSystem';
 import './styles/global.css';
+import 'antd/dist/reset.css';
 
-const { Content } = Layout;
+
+
+import AIAgent from './components/AIAgent';
+import { Button } from 'antd';
+import { MessageOutlined } from '@ant-design/icons';
 
 function AppWithSidebar() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
+  const [isAgentVisible, setIsAgentVisible] = useState(false);
 
+  const handleCollapse = (isCollapsed: boolean) => {
+    setCollapsed(isCollapsed);
+  };
+
+  const toggleAgent = () => {
+    setIsAgentVisible(!isAgentVisible);
+  };
+  
   useEffect(() => {
-    // Check if user is authenticated and fetch app data
+    setLoading(true);
+    const localUserRaw = localStorage.getItem('user');
+    if (localUserRaw) {
+      try {
+        const localUser = JSON.parse(localUserRaw);
+        setUser(localUser);
+      } catch (e) {
+        console.error("Failed to parse user from localStorage", e);
+        setUser(null);
+      }
+    }
+    setLoading(false);
+
     const checkAuth = async () => {
       try {
-        setLoading(true);
-
-        // First check if user is authenticated
-        const authResponse = await axios.get('/api/auth/me', { withCredentials: true });
+        // We don't need to setLoading(true) here, as we want to avoid a screen flash.
+        // The app is already usable with local data.
+        const authResponse = await axios.get('/auth/me');
         if (authResponse.data.user) {
+          // Server confirmed auth, update user data and save it.
           setUser(authResponse.data.user);
-
-          // Then fetch app data (products and customers)
-          try {
-            const appDataResponse = await axios.get('/api/auth/app-data', { withCredentials: true });
-
-            // Store data in localStorage for offline access
-            if (appDataResponse.data.products) {
-              localStorage.setItem('simpleInventoryProducts', JSON.stringify(appDataResponse.data.products));
-              // Dispatch custom event to notify SimpleProductTab component
-              window.dispatchEvent(new CustomEvent('productsUpdated'));
-            }
-
-            if (appDataResponse.data.customers) {
-              localStorage.setItem('customers', JSON.stringify(appDataResponse.data.customers));
-              // Dispatch custom event to notify CustomerScreen component
-              window.dispatchEvent(new CustomEvent('customersUpdated'));
-            }
-          } catch (appDataError) {
-            console.error('Failed to fetch app data:', appDataError);
-            // Try to fetch data directly from API endpoints if app-data fails
-            try {
-              // Fetch products directly
-              const productsResponse = await axios.get('/api/inventory', { withCredentials: true });
-              if (productsResponse.data) {
-                localStorage.setItem('simpleInventoryProducts', JSON.stringify(productsResponse.data));
-                window.dispatchEvent(new CustomEvent('productsUpdated'));
-              }
-
-              // Fetch customers directly
-              const customersResponse = await axios.get('/api/customers', { withCredentials: true });
-              if (customersResponse.data) {
-                localStorage.setItem('customers', JSON.stringify(customersResponse.data));
-                window.dispatchEvent(new CustomEvent('customersUpdated'));
-              }
-            } catch (directFetchError) {
-              console.error('Failed to fetch data directly:', directFetchError);
-            }
-          }
+          localStorage.setItem('user', JSON.stringify(authResponse.data.user));
+        } else {
+            // This case means server is running but says we are not authenticated.
+            // This could be due to an expired session. So we log out.
+            setUser(null);
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
         }
-      } catch (error) {
-        console.log('Authentication check failed:', error);
-        setUser(null);
-        // Continue with app initialization even without authentication
-      } finally {
-        setLoading(false);
+      } catch (error: any) {
+        // This will happen if we are offline.
+        console.log('Authentication check with server failed (possibly offline):', error.message);
+        // We don't do anything here, we just let the user continue with the local data.
       }
     };
 
     checkAuth();
+    
+    // Initialize the data sync service
+    dataSyncService.init();
+    
+    // Initialize Google Drive service only when online
+    if (navigator.onLine) {
+      googleDriveSyncService.initializeGapi().then(() => {
+        googleDriveSyncService.initializeGis();
+      }).catch(error => {
+        console.error('Failed to initialize Google Drive service:', error);
+      });
+    } else {
+      console.log("Offline: Skipping Google Drive service initialization.");
+    }
   }, []);
 
   // Listen for authentication events and refresh data when needed
@@ -116,31 +131,25 @@ function AppWithSidebar() {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/api/auth/logout', {}, { withCredentials: true });
-      setUser(null);
-
-      // Clear products and customers data from localStorage
-      localStorage.removeItem('simpleInventoryProducts');
-      localStorage.removeItem('customers');
-
-      // Dispatch custom events to notify components
-      window.dispatchEvent(new CustomEvent('productsUpdated'));
-      window.dispatchEvent(new CustomEvent('customersUpdated'));
-
-      message.success('You have been successfully logged out');
+      await axios.post('/auth/logout', {});
     } catch (error) {
-      console.error('Logout failed:', error);
-      // Even if the API call fails, clear local user state
-      setUser(null);
-
-      // Still clear localStorage data
-      localStorage.removeItem('simpleInventoryProducts');
-      localStorage.removeItem('customers');
-
-      // Dispatch custom events to notify components
-      window.dispatchEvent(new CustomEvent('productsUpdated'));
-      window.dispatchEvent(new CustomEvent('customersUpdated'));
+      console.error('Logout API call failed (logging out locally anyway):', error);
     }
+    
+    setUser(null);
+
+    // Clear all session-related data from localStorage
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    localStorage.removeItem('simpleInventoryProducts');
+    localStorage.removeItem('customers');
+    localStorage.removeItem('erp_inventory'); // Also clear this one to be safe
+
+    // Dispatch custom events to notify components to clear their state
+    window.dispatchEvent(new CustomEvent('productsUpdated'));
+    window.dispatchEvent(new CustomEvent('customersUpdated'));
+
+    message.success('You have been successfully logged out');
   };
 
   if (loading) {
@@ -161,49 +170,65 @@ function AppWithSidebar() {
 
   if (!user) {
     return (
-      <ConfigProvider theme={antdTheme}>
-        <DesignSystem>
-          <LoginForm onLogin={handleLogin} />
-        </DesignSystem>
-      </ConfigProvider>
+      <DesignSystemProvider>
+        <LoginForm onLogin={handleLogin} />
+      </DesignSystemProvider>
     );
   }
 
   return (
-    <ConfigProvider theme={antdTheme}>
-      <DesignSystem>
-        <Router>
-          <Layout style={{ minHeight: '100vh' }}>
-            <SidebarNavigation user={user} onLogout={handleLogout} />
-            <Layout style={{ 
-              marginLeft: 200, 
-              transition: 'margin-left 0.2s',
-              '@media (max-width: 991px)': {
-                marginLeft: 0,
-              }
-            }}>
-              <Content style={{ 
-                margin: spacing[4],
-                padding: spacing[4],
-                minHeight: 280,
-                background: colors.gray[50],
-                borderRadius: borderRadius.lg,
-                marginTop: 80, // Account for fixed header
-              }}>
-                <Routes>
-                  <Route path="/dashboard" element={<Dashboard user={user} onLogout={handleLogout} />} />
-                  <Route path="/inventory" element={<ProductManagementUpdated />} />
-                  <Route path="/inventory-management" element={<InventoryScreen />} />
-                  <Route path="/invoice" element={<InvoiceNavigation />} />
-                  <Route path="/customers" element={<CustomerScreen />} />
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                </Routes>
-              </Content>
-            </Layout>
-          </Layout>
-        </Router>
-      </DesignSystem>
-    </ConfigProvider>
+    <DesignSystemProvider>
+      <Router>
+        <div style={{ display: 'flex', minHeight: '100vh' }}>
+          <SidebarNavigation 
+            user={user} 
+            onLogout={handleLogout} 
+            collapsed={collapsed}
+            onCollapse={handleCollapse}
+          />
+          <main style={{ 
+            flex: 1, 
+            padding: '1rem', 
+            background: '#f0f2f5', 
+            marginLeft: collapsed ? 80 : 200,
+            transition: 'margin-left 0.2s',
+          }}>
+            <div style={{ marginTop: 64, padding: '1rem' }}>
+              <Routes>
+                <Route path="/dashboard" element={<Dashboard user={user} onLogout={handleLogout} />} />
+                <Route path="/inventory" element={<ProductManagementUpdated />} />
+                <Route path="/inventory-management" element={<InventoryScreen />} />
+                <Route path="/invoice" element={<InvoiceNavigation />} />
+                <Route path="/invoice-history" element={<InvoiceHistoryScreen />} />
+                <Route path="/customers" element={<CustomerScreen />} />
+                <Route path="/reports" element={<SalesReportsScreen />} />
+                <Route path="/reports/inventory" element={<InventoryReportScreen />} />
+                <Route path="/reports/expenses" element={<ExpensesReportScreen />} />
+                <Route path="/employees" element={<EmployeesScreen />} />
+                <Route path="/expenses" element={<ExpensesScreen />} />
+                <Route path="/inventory-history" element={<InventoryHistoryScreen />} />
+                <Route path="/settings" element={<UserSettings />} />
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </div>
+          </main>
+          <Button
+            type="primary"
+            shape="circle"
+            icon={<MessageOutlined />}
+            size="large"
+            onClick={toggleAgent}
+            style={{
+              position: 'fixed',
+              bottom: '30px',
+              right: '30px',
+              zIndex: 999
+            }}
+          />
+          {isAgentVisible && <AIAgent />}
+        </div>
+      </Router>
+    </DesignSystemProvider>
   );
 }
 

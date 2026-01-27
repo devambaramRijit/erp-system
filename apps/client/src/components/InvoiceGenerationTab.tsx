@@ -39,7 +39,7 @@ const InvoiceGenerationTab: React.FC = () => {
 
   useEffect(() => {
     // Load inventory items
-    const savedItems = localStorage.getItem('inventoryItemsWithProductType');
+    const savedItems = localStorage.getItem('erp_inventory');
     if (savedItems) {
       try {
         setInventoryItems(JSON.parse(savedItems));

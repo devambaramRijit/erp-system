@@ -6,6 +6,7 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
 const { Sequelize, DataTypes } = require('sequelize');
+const bcrypt = require('bcrypt');
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = 'uploads';
@@ -113,8 +114,26 @@ const User = sequelize.define('User', {
   }
 }, {
   timestamps: true,
-  tableName: 'users'
+  tableName: 'users',
+  hooks: {
+    beforeCreate: async (user) => {
+      if (user.password) {
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(user.password, salt);
+      }
+    },
+    beforeUpdate: async (user) => {
+      if (user.changed('password')) {
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(user.password, salt);
+      }
+    }
+  }
 });
+
+User.prototype.validPassword = async function(password) {
+  return await bcrypt.compare(password, this.password);
+};
 
 // Define the Customer model
 const Customer = sequelize.define('Customer', {
@@ -249,25 +268,23 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // In a real app, you would hash and compare passwords
-    // For this example, we'll just check if the password exists
-    if (password) {
-      req.session.user = {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role
-      };
-
-      res.json({
-        user: req.session.user,
-        message: 'Login successful'
-      });
-    } else {
-      res.status(401).json({
-        message: 'Invalid email or password'
-      });
+    // Validate password
+    const isValidPassword = await user.validPassword(password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
+
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role
+    };
+
+    res.json({
+      user: req.session.user,
+      message: 'Login successful'
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({

@@ -22,7 +22,17 @@ const port = process.env.PORT || 3000;
 const host = process.env.HOST || 'localhost';
 
 // Middleware
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    try {
+      JSON.parse(buf);
+    } catch (e) {
+      console.error('Invalid JSON:', buf.toString());
+      res.status(400).json({ error: 'Invalid JSON' });
+      throw e;
+    }
+  }
+}));
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -821,7 +831,12 @@ let invoices = [];
 
 // Function to save invoice data to file
 function saveInvoiceData() {
-  fs.writeFileSync('invoices-data.json', JSON.stringify(invoices, null, 2));
+  try {
+    fs.writeFileSync('invoices-data.json', JSON.stringify(invoices, null, 2));
+  } catch (error) {
+    console.error('Error saving invoice data:', error);
+    throw error;
+  }
 }
 
 // Load invoice data from file if it exists
@@ -900,6 +915,16 @@ app.post('/api/invoices', (req, res) => {
 });
 
 app.put('/api/invoices/:id', (req, res) => {
+  console.log('=== INVOICE UPDATE REQUEST ===');
+  console.log('Invoice ID:', req.params.id);
+  console.log('Request body:', JSON.stringify(req.body, null, 2));
+  
+  // Check if request body exists
+  if (!req.body || Object.keys(req.body).length === 0) {
+    console.error('No request body received');
+    return res.status(400).json({ message: 'No invoice data provided' });
+  }
+  
   const invoiceIndex = invoices.findIndex(inv => inv.id === req.params.id);
   
   if (invoiceIndex === -1) {
@@ -981,6 +1006,7 @@ app.use((req, res, next) => {
   console.log(`Timestamp: ${new Date().toISOString()}`);
   console.log(`Method: ${req.method}`);
   console.log(`URL: ${req.originalUrl}`);
+  console.log(`Headers:`, req.headers);
   console.log(`Body: ${JSON.stringify(req.body)}`);
   console.log(`=== END REQUEST LOG ===`);
   next();
